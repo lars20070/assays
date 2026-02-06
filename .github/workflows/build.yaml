@@ -1,12 +1,11 @@
 name: CI
 on:
-  push
-  # pull_request:
-  #   branches:
-  #     - main
-  # push:
-  #   branches:
-  #     - main
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -94,7 +93,7 @@ jobs:
           imageName: ghcr.io/lars20070/assays-devcontainer
           cacheFrom: ghcr.io/lars20070/assays-devcontainer
           imageTag: latest,${{ github.sha }}
-          push: always
+          push: filter
           runCmd: |
             bash -c '
               set -o errexit -o pipefail -o nounset
