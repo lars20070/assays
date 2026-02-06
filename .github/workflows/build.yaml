@@ -2,10 +2,14 @@ name: CI
 on:
   push:
     branches:
-      - main
+      - master
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.mdc"
   pull_request:
-    branches:
-      - main
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.mdc"
 
 permissions:
   contents: read
@@ -94,7 +98,7 @@ jobs:
           cacheFrom: ghcr.io/lars20070/assays-devcontainer
           imageTag: latest,${{ github.sha }}
           push: filter
-          refFilterForPush: refs/heads/main
+          refFilterForPush: refs/heads/master
           runCmd: |
             bash -c '
               set -o errexit -o pipefail -o nounset
