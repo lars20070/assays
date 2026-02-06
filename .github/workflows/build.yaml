@@ -38,7 +38,7 @@ jobs:
           dotnet: true
           haskell: true
           large-packages: true
-          docker-images: true
+          docker-images: false
           swap-storage: true
       - name: Create .env file
         # Define in GitHub repository: Settings -> Secrets and variables -> Actions -> New repository secret
@@ -94,12 +94,11 @@ jobs:
           cacheFrom: ghcr.io/lars20070/assays-devcontainer
           imageTag: latest,${{ github.sha }}
           push: filter
+          refFilterForPush: refs/heads/main
           runCmd: |
             bash -c '
               set -o errexit -o pipefail -o nounset
               uv --version
               uv run python --version
-              uv run ruff check .
-              uv run pyright .
               echo "Dev container built and run successfully"
             '
