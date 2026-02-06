@@ -168,6 +168,11 @@ dependencies = [
     { name = "pydantic-ai-slim", extra = ["mcp"] },
     { name = "pydantic-evals", extra = ["logfire"] },
     { name = "pydantic-settings" },
+    { name = "python-dotenv" },
+]
+
+[package.dev-dependencies]
+dev = [
     { name = "pylint" },
     { name = "pyright" },
     { name = "pytest" },
@@ -176,7 +181,6 @@ dependencies = [
     { name = "pytest-mock" },
     { name = "pytest-recording" },
     { name = "pytest-xdist" },
-    { name = "python-dotenv" },
     { name = "ruff" },
 ]
 
@@ -193,6 +197,11 @@ requires-dist = [
     { name = "pydantic-ai-slim", extras = ["mcp"], specifier = ">=0.0.40" },
     { name = "pydantic-evals", extras = ["logfire"], specifier = ">=0.0.51" },
     { name = "pydantic-settings", specifier = ">=2.8.1" },
+    { name = "python-dotenv", specifier = ">=1.1.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
     { name = "pylint", specifier = ">=3.3.4" },
     { name = "pyright", specifier = ">=1.1.404" },
     { name = "pytest", specifier = ">=8.3.4" },
@@ -201,7 +210,6 @@ requires-dist = [
     { name = "pytest-mock", specifier = ">=3.15.1" },
     { name = "pytest-recording", specifier = ">=0.13.4" },
     { name = "pytest-xdist", specifier = ">=3.6.1" },
-    { name = "python-dotenv", specifier = ">=1.1.0" },
     { name = "ruff", specifier = ">=0.13.3" },
 ]
 
