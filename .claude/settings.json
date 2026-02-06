@@ -15,7 +15,6 @@
     "runtime": [
       "pytest",
       "pydantic-ai",
-      "asyncio",
       "loguru"
     ],
     "dev": [
