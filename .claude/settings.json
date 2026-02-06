@@ -65,8 +65,8 @@
     "test": "uv run pytest",
     "testParallel": "uv run pytest -n auto",
     "coverage": "uv run pytest --cov=src/assays --cov-report=term-missing",
-    "format": "uvx ruff format .",
-    "lint": "uvx ruff check --fix .",
-    "typecheck": "uvx pyright ."
+    "format": "uv run ruff format .",
+    "lint": "uv run ruff check --fix .",
+    "typecheck": "uv run pyright ."
   }
 }

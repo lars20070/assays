@@ -33,8 +33,8 @@ dependencies = [
 "Source Code" = "https://github.com/lars20070/assays"
 "Bug Tracker" = "https://github.com/lars20070/assays/issues"
 
-[project.entry-points.pytest11]
-assays = "assays.plugin"
+# [project.entry-points.pytest11]
+# assays = "assays.plugin"
 
 [tool.ruff]
 line-length = 150
