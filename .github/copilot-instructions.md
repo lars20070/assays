@@ -1,6 +1,6 @@
 # Project Overview
 
-DeepResearcher2 is a fully local web research and report writing assistant that prioritizes user privacy. It leverages PydanticAI as the core agent framework to orchestrate a multi-step research workflow. The system runs AI models locally using Ollama and performs web searches through SearXNG, ensuring no data leaves the user's environment by default. The application supports both local and cloud-based configurations, allowing users to choose between complete privacy or enhanced performance with API-based services.
+Assays is a fully local web research and report writing assistant that prioritizes user privacy. It leverages PydanticAI as the core agent framework to orchestrate a multi-step research workflow. The system runs AI models locally using Ollama and performs web searches through SearXNG, ensuring no data leaves the user's environment by default. The application supports both local and cloud-based configurations, allowing users to choose between complete privacy or enhanced performance with API-based services.
 
 The research workflow follows a state-machine pattern with four main stages:
 1. **Web Search**: Initiates targeted searches based on the research topic
@@ -13,7 +13,7 @@ This project uses PydanticAI's agent capabilities for structured responses, depe
 ## Folder Structure
 
 ```
-deepresearcher2/
+assays/
 ├── benchmarks
 │   ├── codenames
 │   │   ├── task_schema.json
@@ -25,14 +25,14 @@ deepresearcher2/
 │   └── rephrase
 │       ├── task_schema.json
 │       └── task.json
-├── deepresearcher2.log
+├── assays.log
 ├── dist
 ├── LICENSE
 ├── pyproject.toml
 ├── README.md
 ├── reports
 ├── src
-│   └── deepresearcher2
+│   └── assays
 │       ├── __init__.py
 │       ├── agents.py
 │       ├── cli.py
@@ -79,14 +79,6 @@ deepresearcher2/
 - **pydantic-ai**: Main agent framework for building the research assistant
 - **pydantic**: Data validation and settings management using Python type annotations
 - **ollama**: Python client for interacting with local Ollama models
-- **httpx**: Async HTTP client for web requests and API calls
-- **aiohttp**: Alternative async HTTP library for specific integrations
-
-### Search and Web Tools
-- **searxng**: Integration library for SearXNG meta-search engine
-- **beautifulsoup4**: HTML parsing for web content extraction
-- **markdownify**: Convert HTML content to Markdown format
-- **lxml**: XML and HTML processing with XPath support
 
 ### Development Tools
 - **python-dotenv**: Load environment variables from .env files
