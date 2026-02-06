@@ -47,8 +47,8 @@ jobs:
       - name: Create .env file
         # Define in GitHub repository: Settings -> Secrets and variables -> Actions -> New repository secret
         run: |
-          echo LOGFIRE_TOKEN=${{ secrets.LOGFIRE_TOKEN }} >> .env
-          echo CODECOV_TOKEN=${{ secrets.CODECOV_TOKEN }} >> .env
+          echo "LOGFIRE_TOKEN=${{ secrets.LOGFIRE_TOKEN }}" >> .env
+          echo "CODECOV_TOKEN=${{ secrets.CODECOV_TOKEN }}" >> .env
       - name: Install uv package manager
         uses: astral-sh/setup-uv@v5.2.2
         with:
