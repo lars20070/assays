@@ -99,6 +99,7 @@ jobs:
           cacheFrom: ghcr.io/lars20070/assays-devcontainer
           imageTag: latest,${{ github.sha }}
           push: filter
+          # refFilterForPush: refs/heads/**
           refFilterForPush: refs/heads/master
           runCmd: |
             bash -c '

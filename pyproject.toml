@@ -16,7 +16,6 @@ dependencies = [
   "pydantic-settings>=2.8.1",
   "choix>=0.4.1",
   "numpy>=2.3.3",
-  "ddgs>=9.6.1",
   "fastmcp>=2.13.0.1",
 ]
 
@@ -37,8 +36,8 @@ dev = [
 "Source Code" = "https://github.com/lars20070/assays"
 "Bug Tracker" = "https://github.com/lars20070/assays/issues"
 
-# [project.entry-points.pytest11]
-# assays = "assays.plugin"
+[project.entry-points.pytest11]
+assays = "assays.plugin"
 
 [tool.ruff]
 line-length = 150
