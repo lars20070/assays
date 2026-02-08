@@ -11,6 +11,8 @@ The evaluator (Bradley-Terry / Pairwise) runs inside `pytest_runtest_makereport(
 
 Move evaluator execution from `pytest_runtest_makereport` to a **hookwrapper** on `pytest_runtest_teardown`. Code after `yield` in the hookwrapper runs **after** all fixture finalizers (VCR cassette closed), but `item` and `item.stash` remain accessible.
 
+**Note on post-teardown data access**: `item.funcargs` and `item.stash` are plain dicts on the `Item` object. Fixture finalization tears down resources but does not clear these dicts. `AssayContext` (a Pydantic model with `dataset`, `path`, `assay_mode`) holds no external resources that a finalizer would invalidate. The same applies to `item.stash[AGENT_RESPONSES_KEY]` and `item.stash[BASELINE_DATASET_KEY]`. This is safe, but worth documenting with a code comment for future contributors.
+
 ### Hook execution order (after fix)
 
 ```
@@ -31,11 +33,18 @@ Replace the current `trylast` regular hook with a `hookwrapper`:
 ```python
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_teardown(item: Item, nextitem: Item | None) -> Generator[None, None, None]:
-    yield  # Default teardown runs: all fixtures finalized, VCR cassette closed
+    outcome = yield  # Default teardown runs: all fixtures finalized, VCR cassette closed
 
     if not _is_assay(item):
         return
 
+    # Log if teardown itself had errors (evaluation still proceeds because
+    # all data we need was stashed during setup/call, not during teardown).
+    if outcome is not None and outcome.excinfo is not None:
+        logger.warning("Teardown had errors; proceeding with post-teardown assay logic.")
+
+    # funcargs and stash survive fixture finalization -- they are plain dicts
+    # on the Item object and are not cleared by finalizers.
     assay: AssayContext | None = item.funcargs.get("context")  # type: ignore[attr-defined]
     if assay is None:
         return
@@ -46,10 +55,12 @@ def pytest_runtest_teardown(item: Item, nextitem: Item | None) -> Generator[None
         _run_evaluation(item, assay)
 ```
 
+Add `Generator` to the imports (use `collections.abc.Generator` to match the codebase style).
+
 Extract two helper functions from the current inline code:
 
 - `_serialize_baseline(item, assay)` -- current teardown body (merge responses into cases, write to disk)
-- `_run_evaluation(item, assay)` -- current makereport evaluation body (get evaluator from marker, `asyncio.run(evaluator(item))`, serialize readout)
+- `_run_evaluation(item, assay)` -- current makereport evaluation body (get evaluator from marker, `asyncio.run(evaluator(item))`, serialize readout). **Must preserve the existing try/except from makereport** that catches evaluation errors and logs via `logger.exception()`.
 
 ### 2. [plugin.py](src/assays/plugin.py) -- `pytest_runtest_makereport`
 
