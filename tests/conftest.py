@@ -1,63 +1,11 @@
 #!/usr/bin/env python3
-import os
-import time
 from collections.abc import Generator
-from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
-from pytest_mock import MockerFixture
 from vcr.request import Request
 
 from assays.config import config
 from assays.evals import EvalGame, EvalPlayer
-from assays.logger import logger
-
-
-def pytest_configure(config: pytest.Config) -> None:
-    config.addinivalue_line("markers", "paid: tests requiring paid API keys")
-    config.addinivalue_line("markers", "ollama: tests requiring a local Ollama instance")
-    config.addinivalue_line("markers", "lmstudio: tests requiring a local LM Studio instance")
-    config.addinivalue_line("markers", "searxng: tests requiring a local SearXNG instance")
-    config.addinivalue_line("markers", "example: examples which are not testing assays functionality")
-
-
-@pytest.fixture(autouse=True)
-def skip_ollama_tests(request: pytest.FixtureRequest) -> None:
-    """
-    Skip tests marked with 'ollama' when running in CI environment.
-    Run these tests only locally.
-    """
-    if request.node.get_closest_marker("ollama") and os.getenv("GITHUB_ACTIONS") == "true":
-        pytest.skip("Tests requiring Ollama skipped in CI environment")
-
-
-@pytest.fixture(autouse=True)
-def skip_lmstudio_tests(request: pytest.FixtureRequest) -> None:
-    """
-    Skip tests marked with 'lmstudio' when running in CI environment.
-    Run these tests only locally.
-    """
-    if request.node.get_closest_marker("lmstudio") and os.getenv("GITHUB_ACTIONS") == "true":
-        pytest.skip("Tests requiring LM Studio skipped in CI environment")
-
-
-@pytest.fixture(autouse=True)
-def skip_searxng_tests(request: pytest.FixtureRequest) -> None:
-    """
-    Skip tests marked with 'searxng' when running in CI environment.
-    Run these tests only locally.
-    """
-    if request.node.get_closest_marker("searxng") and os.getenv("GITHUB_ACTIONS") == "true":
-        pytest.skip("Tests requiring SearXNG skipped in CI environment")
-
-
-@pytest.fixture
-def topic() -> str:
-    """
-    Provide a research topic for unit testing.
-    """
-    return "petrichor"
 
 
 @pytest.fixture(autouse=True)
@@ -93,17 +41,6 @@ def ice_cream_game() -> EvalGame:
 
 
 @pytest.fixture
-def mock_fetch_full_page_content(mocker: MockerFixture) -> MagicMock:
-    """
-    Mocks the fetch_full_page_content function.
-    """
-    return mocker.patch(
-        "assays.utils.fetch_full_page_content",
-        return_value="Mocked long page content for testing purposes.",
-    )
-
-
-@pytest.fixture
 def vcr_config() -> dict[str, object]:
     """
     Configure VCR recordings for tests with @pytest.mark.vcr() decorator.
@@ -128,25 +65,3 @@ def vcr_config() -> dict[str, object]:
         "decode_compressed_response": True,
         "before_record_request": uri_spoofing,
     }
-
-
-@pytest.fixture
-def timer_for_tests(request: pytest.FixtureRequest) -> Generator[None, None, None]:
-    """
-    Measure and log the duration of each test.
-    """
-    start = time.perf_counter()
-    yield
-    duration = time.perf_counter() - start
-    logger.info(f"{request.node.name} completed in {duration:.2f} seconds.")
-
-
-@pytest.fixture
-def assay_path(request: pytest.FixtureRequest) -> Path:
-    """
-    Compute the assay file path from test module and function name.
-    """
-    path = request.path
-    module_name = path.stem
-    test_name = request.node.name.split("[")[0]
-    return path.parent / "assays" / module_name / f"{test_name}.json"
