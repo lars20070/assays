@@ -18,7 +18,7 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_evals import Dataset
 from pytest import CallInfo, Config, Function, Item, Parser
 
-from .evals.evals import (
+from .evals import (
     EvalGame,
     EvalPlayer,
     EvalTournament,

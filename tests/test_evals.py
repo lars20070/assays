@@ -6,7 +6,7 @@ import random
 import pytest
 from pydantic_ai.settings import ModelSettings
 
-from assays.evals.evals import (
+from assays.evals import (
     EVALUATION_AGENT,
     EvalGame,
     EvalPlayer,

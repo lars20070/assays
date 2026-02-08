@@ -10,7 +10,7 @@ from pytest_mock import MockerFixture
 from vcr.request import Request
 
 from assays.config import config
-from assays.evals.evals import EvalGame, EvalPlayer
+from assays.evals import EvalGame, EvalPlayer
 from assays.logger import logger
 
 
