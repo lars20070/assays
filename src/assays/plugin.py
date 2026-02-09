@@ -67,43 +67,6 @@ class Evaluator(Protocol):
     def __call__(self, item: Item) -> Coroutine[Any, Any, Readout]: ...
 
 
-def pytest_addoption(parser: Parser) -> None:
-    """
-    Register the --assay-mode option (evaluate or new_baseline).
-
-    Args:
-        parser: The pytest argument parser.
-    """
-    parser.addoption(
-        "--assay-mode",
-        action="store",
-        default="evaluate",
-        choices=ASSAY_MODES,
-        help='Assay mode. Defaults to "evaluate".',
-    )
-
-
-def pytest_configure(config: Config) -> None:
-    """
-    Register the @pytest.mark.assay marker.
-
-    Args:
-        config: The pytest configuration object.
-    """
-    logger.info("Registering the @pytest.mark.assay marker.")
-    config.addinivalue_line(
-        "markers",
-        "assay(generator=None, evaluator=BradleyTerryEvaluator()): "
-        "Mark the test for AI agent evaluation (assay). "
-        "Args: "
-        "generator - optional callable returning a Dataset for test cases; "
-        "evaluator - optional Evaluator instance for custom evaluation strategy "
-        "(defaults to BradleyTerryEvaluator with default settings). "
-        "Configure evaluators by instantiating with parameters: "
-        "evaluator=BradleyTerryEvaluator(criterion='Which response is better?')",
-    )
-
-
 class AssayContext(BaseModel):
     """
     Context injected into assay tests containing dataset, path, and mode.
@@ -202,6 +165,48 @@ def _run_evaluation(item: Item, assay: AssayContext) -> None:
 
     except Exception:
         logger.exception("Error during evaluation.")
+
+
+# =============================================================================
+# Pytest plugin hooks for assay functionality
+# =============================================================================
+
+
+def pytest_addoption(parser: Parser) -> None:
+    """
+    Register the --assay-mode option (evaluate or new_baseline).
+
+    Args:
+        parser: The pytest argument parser.
+    """
+    parser.addoption(
+        "--assay-mode",
+        action="store",
+        default="evaluate",
+        choices=ASSAY_MODES,
+        help='Assay mode. Defaults to "evaluate".',
+    )
+
+
+def pytest_configure(config: Config) -> None:
+    """
+    Register the @pytest.mark.assay marker.
+
+    Args:
+        config: The pytest configuration object.
+    """
+    logger.info("Registering the @pytest.mark.assay marker.")
+    config.addinivalue_line(
+        "markers",
+        "assay(generator=None, evaluator=BradleyTerryEvaluator()): "
+        "Mark the test for AI agent evaluation (assay). "
+        "Args: "
+        "generator - optional callable returning a Dataset for test cases; "
+        "evaluator - optional Evaluator instance for custom evaluation strategy "
+        "(defaults to BradleyTerryEvaluator with default settings). "
+        "Configure evaluators by instantiating with parameters: "
+        "evaluator=BradleyTerryEvaluator(criterion='Which response is better?')",
+    )
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -354,6 +359,11 @@ def pytest_runtest_teardown(item: Item, nextitem: Item | None) -> Generator[None
                 _run_evaluation(item, assay)
 
     yield  # Fixture finalization runs here (VCR cassette closes)
+
+
+# =============================================================================
+# Evaluators
+# =============================================================================
 
 
 class PairwiseEvaluator:
