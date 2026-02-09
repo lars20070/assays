@@ -54,6 +54,14 @@ if TYPE_CHECKING:
     from pytest_mock import MockerFixture
 
 
+def _drive_hookwrapper(item: Item, nextitem: Item | None = None) -> None:
+    """Helper to drive pytest_runtest_teardown hookwrapper generator."""
+    gen = pytest_runtest_teardown(item, nextitem)
+    next(gen)  # Run until yield
+    with contextlib.suppress(StopIteration):
+        next(gen)  # Run code after yield
+
+
 # =============================================================================
 # Module Import Tests
 # =============================================================================
@@ -587,8 +595,8 @@ def test_pytest_runtest_teardown_non_assay_item(mocker: MockerFixture) -> None:
     mock_item = mocker.MagicMock(spec=Item)
     mocker.patch("assays.plugin._is_assay", return_value=False)
 
-    # Should not raise
-    pytest_runtest_teardown(mock_item)
+    # Drive the hookwrapper generator
+    _drive_hookwrapper(mock_item, None)
 
 
 def test_pytest_runtest_teardown_evaluate_mode(mocker: MockerFixture, tmp_path: Path) -> None:
@@ -598,13 +606,18 @@ def test_pytest_runtest_teardown_evaluate_mode(mocker: MockerFixture, tmp_path: 
 
     mock_item = mocker.MagicMock(spec=Function)
     mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=dataset_path, assay_mode="evaluate")}
+    mock_marker = mocker.MagicMock()
+    mock_marker.kwargs = {"evaluator": AsyncMock(return_value=Readout(passed=True))}
+    mock_item.get_closest_marker.return_value = mock_marker
 
     mocker.patch("assays.plugin._is_assay", return_value=True)
     mocker.patch("assays.plugin.logger")
+    mocker.patch("assays.plugin.asyncio.run")  # Mock to prevent actual evaluation
 
-    pytest_runtest_teardown(mock_item)
+    # Drive the hookwrapper generator
+    _drive_hookwrapper(mock_item, None)
 
-    # File should not be created in evaluate mode
+    # File should not be created in evaluate mode (evaluation doesn't serialize dataset)
     assert not dataset_path.exists()
 
 
@@ -634,7 +647,8 @@ def test_pytest_runtest_teardown_new_baseline_mode(mocker: MockerFixture, tmp_pa
     mocker.patch("assays.plugin._is_assay", return_value=True)
     mocker.patch("assays.plugin.logger")
 
-    pytest_runtest_teardown(mock_item)
+    # Drive the hookwrapper generator
+    _drive_hookwrapper(mock_item, None)
 
     # File should be created in new_baseline mode
     assert dataset_path.exists()
@@ -677,7 +691,8 @@ def test_pytest_runtest_teardown_new_baseline_response_count_mismatch(mocker: Mo
     mocker.patch("assays.plugin._is_assay", return_value=True)
     mock_logger = mocker.patch("assays.plugin.logger")
 
-    pytest_runtest_teardown(mock_item)
+    # Drive the hookwrapper generator
+    _drive_hookwrapper(mock_item, None)
 
     # File should NOT be created due to mismatch
     assert not dataset_path.exists()
@@ -706,7 +721,8 @@ def test_pytest_runtest_teardown_new_baseline_none_output(mocker: MockerFixture,
     mocker.patch("assays.plugin._is_assay", return_value=True)
     mocker.patch("assays.plugin.logger")
 
-    pytest_runtest_teardown(mock_item)
+    # Drive the hookwrapper generator
+    _drive_hookwrapper(mock_item, None)
 
     assert dataset_path.exists()
     reloaded = Dataset[dict[str, str], str, Any].from_file(dataset_path)
@@ -729,7 +745,8 @@ def test_pytest_runtest_teardown_new_baseline_no_responses(mocker: MockerFixture
     mocker.patch("assays.plugin._is_assay", return_value=True)
     mock_logger = mocker.patch("assays.plugin.logger")
 
-    pytest_runtest_teardown(mock_item)
+    # Drive the hookwrapper generator
+    _drive_hookwrapper(mock_item, None)
 
     # File should NOT be created (0 responses vs 1 case)
     assert not dataset_path.exists()
@@ -743,8 +760,8 @@ def test_pytest_runtest_teardown_no_assay_context(mocker: MockerFixture) -> None
 
     mocker.patch("assays.plugin._is_assay", return_value=True)
 
-    # Should not raise
-    pytest_runtest_teardown(mock_item)
+    # Drive the hookwrapper generator - should not raise
+    _drive_hookwrapper(mock_item, None)
 
 
 # =============================================================================
@@ -799,10 +816,6 @@ def test_pytest_runtest_makereport_passed_test(mocker: MockerFixture) -> None:
     """Test pytest_runtest_makereport logs passed test correctly."""
     mock_item = mocker.MagicMock(spec=Function)
     mock_item.nodeid = "tests/test_example.py::test_foo"
-    mock_item.funcargs = {"context": None}  # No assay context
-    mock_marker = mocker.MagicMock()
-    mock_marker.kwargs = {}
-    mock_item.get_closest_marker.return_value = mock_marker
 
     mock_call = mocker.MagicMock()
     mock_call.when = "call"
@@ -822,19 +835,11 @@ def test_pytest_runtest_makereport_passed_test(mocker: MockerFixture) -> None:
     # Verify logger.info was called exactly 3 times for the summary
     assert mock_logger.info.call_count == 3
 
-    # Verify error was not logged for passing test
-    mock_logger.error.assert_not_called()
-    mock_logger.exception.assert_not_called()
-
 
 def test_pytest_runtest_makereport_failed_test(mocker: MockerFixture) -> None:
     """Test pytest_runtest_makereport logs failed test correctly."""
     mock_item = mocker.MagicMock(spec=Function)
     mock_item.nodeid = "tests/test_example.py::test_bar"
-    mock_item.funcargs = {"context": None}
-    mock_marker = mocker.MagicMock()
-    mock_marker.kwargs = {}
-    mock_item.get_closest_marker.return_value = mock_marker
 
     mock_call = mocker.MagicMock()
     mock_call.when = "call"
@@ -849,14 +854,13 @@ def test_pytest_runtest_makereport_failed_test(mocker: MockerFixture) -> None:
     mock_logger.info.assert_any_call("Test Outcome: failed")
 
 
-def test_pytest_runtest_makereport_runs_evaluation(mocker: MockerFixture, tmp_path: Path) -> None:
-    """Test pytest_runtest_makereport runs evaluation and serializes readout."""
+def test_pytest_runtest_teardown_runs_evaluation(mocker: MockerFixture, tmp_path: Path) -> None:
+    """Test pytest_runtest_teardown runs evaluation and serializes readout in evaluate mode."""
     dataset = Dataset[dict[str, str], type[None], Any](cases=[])
     assay_path = tmp_path / "assays" / "test_module" / "test_func.json"
     assay_path.parent.mkdir(parents=True, exist_ok=True)
 
     mock_item = mocker.MagicMock(spec=Function)
-    mock_item.nodeid = "tests/test.py::test_func"
     mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=assay_path, assay_mode="evaluate")}
     mock_marker = mocker.MagicMock()
 
@@ -865,15 +869,11 @@ def test_pytest_runtest_makereport_runs_evaluation(mocker: MockerFixture, tmp_pa
     mock_marker.kwargs = {"evaluator": mock_evaluator}
     mock_item.get_closest_marker.return_value = mock_marker
 
-    mock_call = mocker.MagicMock()
-    mock_call.when = "call"
-    mock_call.excinfo = None
-    mock_call.duration = 0.1
-
     mocker.patch("assays.plugin._is_assay", return_value=True)
     mock_logger = mocker.patch("assays.plugin.logger")
 
-    pytest_runtest_makereport(mock_item, mock_call)
+    # Drive the hookwrapper generator
+    _drive_hookwrapper(mock_item, None)
 
     # Evaluator should have been called
     mock_evaluator.assert_called_once_with(mock_item)
@@ -891,12 +891,11 @@ def test_pytest_runtest_makereport_runs_evaluation(mocker: MockerFixture, tmp_pa
     assert readout_data["details"] == {"test_key": "test_value"}
 
 
-def test_pytest_runtest_makereport_uses_default_evaluator(mocker: MockerFixture) -> None:
-    """Test pytest_runtest_makereport uses BradleyTerryEvaluator() as default."""
+def test_pytest_runtest_teardown_uses_default_evaluator(mocker: MockerFixture) -> None:
+    """Test pytest_runtest_teardown uses BradleyTerryEvaluator() as default."""
     dataset = Dataset[dict[str, str], type[None], Any](cases=[])
 
     mock_item = mocker.MagicMock(spec=Function)
-    mock_item.nodeid = "tests/test.py::test_func"
     mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=Path("/tmp/test.json"), assay_mode="evaluate")}
     mock_item.stash = {
         assays.plugin.AGENT_RESPONSES_KEY: [],
@@ -905,11 +904,6 @@ def test_pytest_runtest_makereport_uses_default_evaluator(mocker: MockerFixture)
     mock_marker = mocker.MagicMock()
     mock_marker.kwargs = {}  # No evaluator specified - should use default
     mock_item.get_closest_marker.return_value = mock_marker
-
-    mock_call = mocker.MagicMock()
-    mock_call.when = "call"
-    mock_call.excinfo = None
-    mock_call.duration = 0.1
 
     mocker.patch("assays.plugin._is_assay", return_value=True)
     mock_logger = mocker.patch("assays.plugin.logger")
@@ -920,44 +914,39 @@ def test_pytest_runtest_makereport_uses_default_evaluator(mocker: MockerFixture)
     mock_tournament.get_player_by_idx = MagicMock(return_value=MagicMock(score=0.5))
     mock_tournament_class.return_value = mock_tournament
 
-    pytest_runtest_makereport(mock_item, mock_call)
+    # Drive the hookwrapper generator
+    _drive_hookwrapper(mock_item, None)
 
     # Should log evaluation completed (no error)
     assert any("Evaluation result" in str(call) for call in mock_logger.info.call_args_list)
 
 
-def test_pytest_runtest_makereport_invalid_evaluator(mocker: MockerFixture) -> None:
-    """Test pytest_runtest_makereport handles non-callable evaluator."""
+def test_pytest_runtest_teardown_invalid_evaluator(mocker: MockerFixture) -> None:
+    """Test pytest_runtest_teardown handles non-callable evaluator."""
     dataset = Dataset[dict[str, str], type[None], Any](cases=[])
 
     mock_item = mocker.MagicMock(spec=Function)
-    mock_item.nodeid = "tests/test.py::test_func"
     mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=Path("/tmp/test.json"), assay_mode="evaluate")}
     mock_marker = mocker.MagicMock()
     mock_marker.kwargs = {"evaluator": "not_callable"}  # Invalid
     mock_item.get_closest_marker.return_value = mock_marker
 
-    mock_call = mocker.MagicMock()
-    mock_call.when = "call"
-    mock_call.excinfo = None
-    mock_call.duration = 0.1
-
     mocker.patch("assays.plugin._is_assay", return_value=True)
     mock_logger = mocker.patch("assays.plugin.logger")
 
-    pytest_runtest_makereport(mock_item, mock_call)
+    # Drive the hookwrapper generator
+    _drive_hookwrapper(mock_item, None)
 
     # Should log error for invalid evaluator
     mock_logger.error.assert_called_once()
     assert "Invalid evaluator type" in str(mock_logger.error.call_args)
 
 
-def test_pytest_runtest_makereport_evaluation_exception(mocker: MockerFixture) -> None:
-    """Test pytest_runtest_makereport handles evaluation exceptions."""
+def test_pytest_runtest_teardown_evaluation_exception(mocker: MockerFixture) -> None:
+    """Test pytest_runtest_teardown handles evaluation exceptions."""
     dataset = Dataset[dict[str, str], type[None], Any](cases=[])
 
     mock_item = mocker.MagicMock(spec=Function)
-    mock_item.nodeid = "tests/test.py::test_func"
     mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=Path("/tmp/test.json"), assay_mode="evaluate")}
     mock_marker = mocker.MagicMock()
 
@@ -968,16 +957,11 @@ def test_pytest_runtest_makereport_evaluation_exception(mocker: MockerFixture) -
     mock_marker.kwargs = {"evaluator": failing_evaluator}
     mock_item.get_closest_marker.return_value = mock_marker
 
-    mock_call = mocker.MagicMock()
-    mock_call.when = "call"
-    mock_call.excinfo = None
-    mock_call.duration = 0.1
-
     mocker.patch("assays.plugin._is_assay", return_value=True)
     mock_logger = mocker.patch("assays.plugin.logger")
 
-    # Should not raise, exception is handled internally
-    pytest_runtest_makereport(mock_item, mock_call)
+    # Drive the hookwrapper generator - should not raise, exception is handled internally
+    _drive_hookwrapper(mock_item, None)
 
     # Should log exception
     mock_logger.exception.assert_called_once()
@@ -1430,7 +1414,8 @@ def test_full_assay_workflow_with_topic_generation(mocker: MockerFixture, tmp_pa
     mock_item.stash[assays.plugin.AGENT_RESPONSES_KEY] = mock_responses
 
     # Run teardown (should merge responses and serialize in new_baseline mode)
-    pytest_runtest_teardown(mock_item)
+    # Drive the hookwrapper generator
+    _drive_hookwrapper(mock_item, None)
 
     # Verify file was created with updated data
     assert dataset_path.exists()
@@ -1639,7 +1624,7 @@ async def test_integration_pairwiseevaluator(context: AssayContext) -> None:
     await _run_query_generation(context)
 
 
-@pytest.mark.vcr()
+# @pytest.mark.vcr()
 @pytest.mark.assay(
     generator=generate_evaluation_cases,
     evaluator=BradleyTerryEvaluator(

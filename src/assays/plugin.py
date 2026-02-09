@@ -146,6 +146,64 @@ def _is_assay(item: Item) -> bool:
     return item.get_closest_marker("assay") is not None
 
 
+def _serialize_baseline(item: Item, assay: AssayContext) -> None:
+    """
+    Serialize the dataset to disk in 'new_baseline' mode.
+
+    Merges captured Agent.run() responses into dataset cases and writes to disk.
+
+    Args:
+        item: The pytest test item.
+        assay: The assay context containing dataset and path.
+    """
+    # Merge captured responses into dataset cases
+    responses = item.stash.get(AGENT_RESPONSES_KEY, [])
+    cases = assay.dataset.cases
+
+    if len(responses) != len(cases):
+        logger.error(f"Cannot merge responses: {len(responses)} responses vs {len(cases)} cases. Skipping serialization.")
+        return
+
+    for case, response in zip(cases, responses, strict=True):
+        case.expected_output = response.output if response.output is not None else ""
+
+    logger.info(f"Serializing assay dataset to {assay.path}")
+    assay.path.parent.mkdir(parents=True, exist_ok=True)
+    assay.dataset.to_file(assay.path, schema_path=None)
+
+
+def _run_evaluation(item: Item, assay: AssayContext) -> None:
+    """
+    Run the configured evaluator on captured responses in (default) 'evaluate' mode.
+
+    Retrieves the evaluator from the marker, runs it asynchronously, and serializes the final readout report.
+
+    Args:
+        item: The pytest test item with captured responses.
+        assay: The assay context containing dataset and path.
+    """
+    # Retrieve evaluator from marker kwargs with type validation
+    marker = item.get_closest_marker("assay")
+    assert marker is not None
+    evaluator: Evaluator = marker.kwargs.get("evaluator", BradleyTerryEvaluator())
+    if not callable(evaluator):
+        logger.error(f"Invalid evaluator type: {type(evaluator)}. Expected callable.")
+        return
+
+    # Run the evaluator asynchronously
+    try:
+        readout = asyncio.run(evaluator(item))
+        logger.info(f"Evaluation result: passed={readout.passed}")
+
+        # Serialize the readout
+        readout_path = assay.path.with_suffix(".readout.json")
+        readout_path.parent.mkdir(parents=True, exist_ok=True)
+        readout.to_file(readout_path)
+
+    except Exception:
+        logger.exception("Error during evaluation.")
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item: Item) -> None:
     """
@@ -275,93 +333,47 @@ def pytest_runtest_call(item: Item) -> Generator[None, None, None]:
         logger.debug(f"Restored Agent.run(), captured {captured_count} responses.")
 
 
-@pytest.hookimpl(trylast=True)
-def pytest_runtest_teardown(item: Item) -> None:
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_teardown(item: Item, nextitem: Item | None) -> Generator[None, None, None]:
     """
-    Serialize the dataset to disk when in new_baseline mode.
+    Hookwrapper for test teardown that runs evaluation or baseline serialization.
 
-    In new_baseline mode, the plugin automatically updates each case's expected_output
-    from the corresponding captured Agent.run() response.
+    Code before yield runs while other fixtures (including VCR cassette recording) are still
+    active and after Agent.run has been restored by pytest_runtest_call.
 
     Args:
         item: The pytest test item being torn down.
+        nextitem: The next test item (if any).
     """
-    if not _is_assay(item):
-        return
+    if _is_assay(item):
+        assay: AssayContext | None = item.funcargs.get("context")  # type: ignore[attr-defined]
+        if assay is not None:
+            if assay.assay_mode == "new_baseline":
+                _serialize_baseline(item, assay)
+            elif assay.assay_mode == "evaluate":
+                _run_evaluation(item, assay)
 
-    # Check whether to serialize the dataset
-    assay: AssayContext | None = item.funcargs.get("context")  # type: ignore[attr-defined]
-    if assay is None or assay.assay_mode != "new_baseline":
-        return
-
-    # Merge captured responses into dataset cases
-    responses = item.stash.get(AGENT_RESPONSES_KEY, [])
-    cases = assay.dataset.cases
-
-    if len(responses) != len(cases):
-        logger.error(f"Cannot merge responses: {len(responses)} responses vs {len(cases)} cases. Skipping serialization.")
-        return
-
-    for case, response in zip(cases, responses, strict=True):
-        case.expected_output = response.output if response.output is not None else ""
-
-    logger.info(f"Serializing assay dataset to {assay.path}")
-    assay.path.parent.mkdir(parents=True, exist_ok=True)
-    assay.dataset.to_file(assay.path, schema_path=None)
+    yield  # Fixture finalization runs here (VCR cassette closes)
 
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_makereport(item: Item, call: CallInfo) -> None:
     """
-    Hook to process test reports and run evaluations after test execution.
-
-    Runs the configured evaluation strategy (default: Bradley-Terry tournament)
-    on captured model outputs after the test's "call" phase completes.
+    Hook to log test execution outcomes.
 
     Args:
-        item: The pytest test item containing test metadata and stashed data.
+        item: The pytest test item containing test metadata.
         call: Information about the test call phase (setup/call/teardown).
     """
     if not _is_assay(item):
         return
-
-    # pytest_runtest_makereport is called three times per test: setup, call, teardown
-    # Here, we are interested in the "call" phase.
-    # Use setup and teardown to report when a fixture or cleanup fails.
     if call.when != "call":
         return
 
-    # Log test execution summary
     logger.info(f"Test: {item.nodeid}")
     test_outcome = "failed" if call.excinfo else "passed"
     logger.info(f"Test Outcome: {test_outcome}")
     logger.info(f"Test Duration: {call.duration:.5f} seconds")
-
-    # Check whether to run evaluation
-    assay: AssayContext | None = item.funcargs.get("context")  # type: ignore[attr-defined]
-    if assay is None or assay.assay_mode != "evaluate":
-        return
-
-    # Retrieve evaluator from marker kwargs with type validation
-    marker = item.get_closest_marker("assay")
-    assert marker is not None
-    evaluator: Evaluator = marker.kwargs.get("evaluator", BradleyTerryEvaluator())
-    if not callable(evaluator):
-        logger.error(f"Invalid evaluator type: {type(evaluator)}. Expected callable.")
-        return
-
-    # Run the evaluator asynchronously
-    try:
-        readout = asyncio.run(evaluator(item))
-        logger.info(f"Evaluation result: passed={readout.passed}")
-
-        # Serialize the readout
-        readout_path = assay.path.with_suffix(".readout.json")
-        readout_path.parent.mkdir(parents=True, exist_ok=True)
-        readout.to_file(readout_path)
-
-    except Exception:
-        logger.exception("Error during evaluation in pytest_runtest_makereport.")
 
 
 class PairwiseEvaluator:
