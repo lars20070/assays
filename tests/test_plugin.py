@@ -45,7 +45,6 @@ from assays.plugin import (
     pytest_addoption,
     pytest_configure,
     pytest_runtest_call,
-    pytest_runtest_makereport,
     pytest_runtest_setup,
     pytest_runtest_teardown,
 )
@@ -57,9 +56,9 @@ if TYPE_CHECKING:
 def _drive_hookwrapper(item: Item, nextitem: Item | None = None) -> None:
     """Helper to drive pytest_runtest_teardown hookwrapper generator."""
     gen = pytest_runtest_teardown(item, nextitem)
-    next(gen)  # Run until yield
+    next(gen)  # Run pre-yield code (evaluation/serialization), then pause at yield
     with contextlib.suppress(StopIteration):
-        next(gen)  # Run code after yield
+        next(gen)  # Resume after yield (fixture finalization)
 
 
 # =============================================================================
@@ -83,7 +82,6 @@ def test_module_imports() -> None:
     assert callable(module.pytest_runtest_setup)
     assert callable(module.pytest_runtest_call)
     assert callable(module.pytest_runtest_teardown)
-    assert callable(module.pytest_runtest_makereport)
     assert hasattr(module, "BradleyTerryEvaluator")
     assert hasattr(module, "PairwiseEvaluator")
     assert hasattr(module, "Readout")
@@ -762,96 +760,6 @@ def test_pytest_runtest_teardown_no_assay_context(mocker: MockerFixture) -> None
 
     # Drive the hookwrapper generator - should not raise
     _drive_hookwrapper(mock_item, None)
-
-
-# =============================================================================
-# pytest_runtest_makereport Tests
-# =============================================================================
-
-
-def test_pytest_runtest_makereport_non_assay_item(mocker: MockerFixture) -> None:
-    """Test pytest_runtest_makereport skips non-assay items."""
-    mock_item = mocker.MagicMock(spec=Item)
-    mock_call = mocker.MagicMock()
-    mock_call.when = "call"
-
-    mocker.patch("assays.plugin._is_assay", return_value=False)
-    mock_logger = mocker.patch("assays.plugin.logger")
-
-    pytest_runtest_makereport(mock_item, mock_call)
-
-    # Logger should not be called for non-assay items
-    mock_logger.info.assert_not_called()
-
-
-def test_pytest_runtest_makereport_setup_phase(mocker: MockerFixture) -> None:
-    """Test pytest_runtest_makereport ignores setup phase."""
-    mock_item = mocker.MagicMock(spec=Function)
-    mock_call = mocker.MagicMock()
-    mock_call.when = "setup"
-
-    mocker.patch("assays.plugin._is_assay", return_value=True)
-    mock_logger = mocker.patch("assays.plugin.logger")
-
-    pytest_runtest_makereport(mock_item, mock_call)
-
-    mock_logger.info.assert_not_called()
-
-
-def test_pytest_runtest_makereport_teardown_phase(mocker: MockerFixture) -> None:
-    """Test pytest_runtest_makereport ignores teardown phase."""
-    mock_item = mocker.MagicMock(spec=Function)
-    mock_call = mocker.MagicMock()
-    mock_call.when = "teardown"
-
-    mocker.patch("assays.plugin._is_assay", return_value=True)
-    mock_logger = mocker.patch("assays.plugin.logger")
-
-    pytest_runtest_makereport(mock_item, mock_call)
-
-    mock_logger.info.assert_not_called()
-
-
-def test_pytest_runtest_makereport_passed_test(mocker: MockerFixture) -> None:
-    """Test pytest_runtest_makereport logs passed test correctly."""
-    mock_item = mocker.MagicMock(spec=Function)
-    mock_item.nodeid = "tests/test_example.py::test_foo"
-
-    mock_call = mocker.MagicMock()
-    mock_call.when = "call"
-    mock_call.excinfo = None
-    mock_call.duration = 0.12345
-
-    mocker.patch("assays.plugin._is_assay", return_value=True)
-    mock_logger = mocker.patch("assays.plugin.logger")
-
-    pytest_runtest_makereport(mock_item, mock_call)
-
-    # Verify all expected log messages
-    mock_logger.info.assert_any_call("Test: tests/test_example.py::test_foo")
-    mock_logger.info.assert_any_call("Test Outcome: passed")
-    mock_logger.info.assert_any_call("Test Duration: 0.12345 seconds")
-
-    # Verify logger.info was called exactly 3 times for the summary
-    assert mock_logger.info.call_count == 3
-
-
-def test_pytest_runtest_makereport_failed_test(mocker: MockerFixture) -> None:
-    """Test pytest_runtest_makereport logs failed test correctly."""
-    mock_item = mocker.MagicMock(spec=Function)
-    mock_item.nodeid = "tests/test_example.py::test_bar"
-
-    mock_call = mocker.MagicMock()
-    mock_call.when = "call"
-    mock_call.excinfo = mocker.MagicMock()  # Has exception
-    mock_call.duration = 0.5
-
-    mocker.patch("assays.plugin._is_assay", return_value=True)
-    mock_logger = mocker.patch("assays.plugin.logger")
-
-    pytest_runtest_makereport(mock_item, mock_call)
-
-    mock_logger.info.assert_any_call("Test Outcome: failed")
 
 
 def test_pytest_runtest_teardown_runs_evaluation(mocker: MockerFixture, tmp_path: Path) -> None:
@@ -1624,7 +1532,7 @@ async def test_integration_pairwiseevaluator(context: AssayContext) -> None:
     await _run_query_generation(context)
 
 
-# @pytest.mark.vcr()
+@pytest.mark.skip(reason="Requires local Ollama server.")
 @pytest.mark.assay(
     generator=generate_evaluation_cases,
     evaluator=BradleyTerryEvaluator(

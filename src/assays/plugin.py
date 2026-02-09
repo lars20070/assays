@@ -356,26 +356,6 @@ def pytest_runtest_teardown(item: Item, nextitem: Item | None) -> Generator[None
     yield  # Fixture finalization runs here (VCR cassette closes)
 
 
-@pytest.hookimpl(tryfirst=True)
-def pytest_runtest_makereport(item: Item, call: CallInfo) -> None:
-    """
-    Hook to log test execution outcomes.
-
-    Args:
-        item: The pytest test item containing test metadata.
-        call: Information about the test call phase (setup/call/teardown).
-    """
-    if not _is_assay(item):
-        return
-    if call.when != "call":
-        return
-
-    logger.info(f"Test: {item.nodeid}")
-    test_outcome = "failed" if call.excinfo else "passed"
-    logger.info(f"Test Outcome: {test_outcome}")
-    logger.info(f"Test Duration: {call.duration:.5f} seconds")
-
-
 class PairwiseEvaluator:
     """Evaluates test outputs using pairwise comparison.
 
