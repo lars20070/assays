@@ -7,15 +7,13 @@ import inspect
 import random
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
 import pytest
-from pydantic_ai import Agent
 from pydantic_ai.agent import AgentRunResult
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.settings import ModelSettings
 from pydantic_evals import Case, Dataset
 from pytest import Function
 
@@ -37,27 +35,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from unittest.mock import AsyncMock
 
+    from pydantic_ai import Agent
+    from pydantic_ai.settings import ModelSettings
     from pytest_mock import MockerFixture
-
-MODEL_SETTINGS = ModelSettings(
-    temperature=0.0,  # Model needs to be deterministic for VCR recording to work.
-    timeout=300,
-)
-
-MODEL = OpenAIChatModel(
-    model_name="qwen2.5:14b",
-    provider=OpenAIProvider(base_url="http://localhost:11434/v1"),  # Local Ollama server
-)
-
-
-EVALUATION_AGENT = Agent(
-    model=MODEL,
-    output_type=Literal["A", "B"],
-    system_prompt=EVALUATION_INSTRUCTIONS,
-    retries=5,
-    instrument=True,
-)
-
 
 # ---------------------------------------------------------------------------
 # Unit tests for EvalPlayer, EvalGame, EvalTournament and BradleyTerryEvaluator
@@ -100,39 +80,39 @@ class TestEvalGame:
         assert game.criterion == "Which answer is better?"
 
     @pytest.mark.asyncio
-    async def test_run_returns_winner_a(self, make_mock_agent: Callable[..., AsyncMock]) -> None:
+    async def test_run_returns_winner_a(self, make_mock_agent: Callable[..., AsyncMock], model_settings: ModelSettings) -> None:
         """When the agent picks A, the first player wins."""
         game = EvalGame(criterion="Which is better?")
         p1 = EvalPlayer(idx=0, item="alpha")
         p2 = EvalPlayer(idx=1, item="beta")
         mock_agent = make_mock_agent("A")
 
-        result = await game.run(players=(p1, p2), agent=mock_agent, model_settings=MODEL_SETTINGS)
+        result = await game.run(players=(p1, p2), agent=mock_agent, model_settings=model_settings)
 
         assert result == (0, 1)
         mock_agent.run.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_run_returns_winner_b(self, make_mock_agent: Callable[..., AsyncMock]) -> None:
+    async def test_run_returns_winner_b(self, make_mock_agent: Callable[..., AsyncMock], model_settings: ModelSettings) -> None:
         """When the agent picks B, the second player wins."""
         game = EvalGame(criterion="Which is better?")
         p1 = EvalPlayer(idx=0, item="alpha")
         p2 = EvalPlayer(idx=1, item="beta")
         mock_agent = make_mock_agent("B")
 
-        result = await game.run(players=(p1, p2), agent=mock_agent, model_settings=MODEL_SETTINGS)
+        result = await game.run(players=(p1, p2), agent=mock_agent, model_settings=model_settings)
 
         assert result == (1, 0)
 
     @pytest.mark.asyncio
-    async def test_run_prompt_contains_player_items(self, make_mock_agent: Callable[..., AsyncMock]) -> None:
+    async def test_run_prompt_contains_player_items(self, make_mock_agent: Callable[..., AsyncMock], model_settings: ModelSettings) -> None:
         """The prompt passed to the agent must include both player items and the criterion."""
         game = EvalGame(criterion="creativity")
         p1 = EvalPlayer(idx=0, item="vanilla")
         p2 = EvalPlayer(idx=1, item="miso caramel")
         mock_agent = make_mock_agent("A")
 
-        await game.run(players=(p1, p2), agent=mock_agent, model_settings=MODEL_SETTINGS)
+        await game.run(players=(p1, p2), agent=mock_agent, model_settings=model_settings)
 
         call_kwargs = mock_agent.run.call_args.kwargs
         prompt = call_kwargs["user_prompt"]
@@ -141,14 +121,14 @@ class TestEvalGame:
         assert "creativity" in prompt
 
     @pytest.mark.asyncio
-    async def test_run_preserves_player_idx_order(self, make_mock_agent: Callable[..., AsyncMock]) -> None:
+    async def test_run_preserves_player_idx_order(self, make_mock_agent: Callable[..., AsyncMock], model_settings: ModelSettings) -> None:
         """Result tuple uses the actual player idx values, not positional indices."""
         game = EvalGame(criterion="test")
         p1 = EvalPlayer(idx=7, item="x")
         p2 = EvalPlayer(idx=3, item="y")
         mock_agent = make_mock_agent("A")
 
-        result = await game.run(players=(p1, p2), agent=mock_agent, model_settings=MODEL_SETTINGS)
+        result = await game.run(players=(p1, p2), agent=mock_agent, model_settings=model_settings)
 
         assert result == (7, 3)
 
@@ -175,14 +155,19 @@ class TestEvalTournament:
 
     @pytest.mark.asyncio
     async def test_run_uses_default_strategy(
-        self, mocker: MockerFixture, ice_cream_tournament: EvalTournament, ice_cream_players: list[EvalPlayer], mock_pydantic_agent: MagicMock
+        self,
+        mocker: MockerFixture,
+        ice_cream_tournament: EvalTournament,
+        ice_cream_players: list[EvalPlayer],
+        mock_pydantic_agent: MagicMock,
+        model_settings: ModelSettings,
     ) -> None:
         """When no strategy is passed, adaptive_uncertainty_strategy is used."""
         scored = [EvalPlayer(idx=p.idx, item=p.item, score=float(i)) for i, p in enumerate(ice_cream_players)]
         mock_strategy = mocker.AsyncMock(return_value=scored)
         mocker.patch("assays.evaluators.bradleyterry.adaptive_uncertainty_strategy", mock_strategy)
 
-        result = await ice_cream_tournament.run(agent=mock_pydantic_agent, model_settings=MODEL_SETTINGS)
+        result = await ice_cream_tournament.run(agent=mock_pydantic_agent, model_settings=model_settings)
 
         mock_strategy.assert_awaited_once()
         assert len(result) == 5
@@ -196,6 +181,7 @@ class TestEvalTournament:
         ice_cream_players: list[EvalPlayer],
         ice_cream_game: EvalGame,
         mock_pydantic_agent: MagicMock,
+        model_settings: ModelSettings,
     ) -> None:
         """A custom strategy function receives the correct arguments."""
         scored = [EvalPlayer(idx=p.idx, item=p.item, score=float(i)) for i, p in enumerate(ice_cream_players)]
@@ -206,7 +192,7 @@ class TestEvalTournament:
         spy = mocker.AsyncMock(side_effect=fake_strategy)
         spy.__name__ = "fake_strategy"
 
-        result = await ice_cream_tournament.run(agent=mock_pydantic_agent, model_settings=MODEL_SETTINGS, strategy=spy)
+        result = await ice_cream_tournament.run(agent=mock_pydantic_agent, model_settings=model_settings, strategy=spy)
 
         spy.assert_awaited_once()
         call_args = spy.call_args
@@ -217,7 +203,7 @@ class TestEvalTournament:
 
     @pytest.mark.asyncio
     async def test_run_forwards_strategy_kwargs(
-        self, ice_cream_tournament: EvalTournament, ice_cream_players: list[EvalPlayer], mock_pydantic_agent: MagicMock
+        self, ice_cream_tournament: EvalTournament, ice_cream_players: list[EvalPlayer], mock_pydantic_agent: MagicMock, model_settings: ModelSettings
     ) -> None:
         """Extra kwargs are forwarded to the strategy function."""
         scored = [EvalPlayer(idx=p.idx, item=p.item, score=0.0) for p in ice_cream_players]
@@ -232,7 +218,7 @@ class TestEvalTournament:
 
         await ice_cream_tournament.run(
             agent=mock_pydantic_agent,
-            model_settings=MODEL_SETTINGS,
+            model_settings=model_settings,
             strategy=capture_strategy,
             max_standard_deviation=1.5,
             alpha=0.2,
@@ -242,14 +228,19 @@ class TestEvalTournament:
 
     @pytest.mark.asyncio
     async def test_run_updates_players_attribute(
-        self, mocker: MockerFixture, ice_cream_tournament: EvalTournament, ice_cream_players: list[EvalPlayer], mock_pydantic_agent: MagicMock
+        self,
+        mocker: MockerFixture,
+        ice_cream_tournament: EvalTournament,
+        ice_cream_players: list[EvalPlayer],
+        mock_pydantic_agent: MagicMock,
+        model_settings: ModelSettings,
     ) -> None:
         """After run(), tournament.players is updated with the scored players."""
         scored = [EvalPlayer(idx=p.idx, item=p.item, score=float(i) * 0.5) for i, p in enumerate(ice_cream_players)]
         mock_strategy = mocker.AsyncMock(return_value=scored)
         mock_strategy.__name__ = "mock_strategy"
 
-        await ice_cream_tournament.run(agent=mock_pydantic_agent, model_settings=MODEL_SETTINGS, strategy=mock_strategy)
+        await ice_cream_tournament.run(agent=mock_pydantic_agent, model_settings=model_settings, strategy=mock_strategy)
 
         assert ice_cream_tournament.players is scored
 
@@ -388,14 +379,13 @@ class TestBradleyTerryEvaluator:
 
 
 # ---------------------------------------------------------------------------
-# Integration tests
+# Integration tests for EvalGame and EvalTournament
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip()
 @pytest.mark.vcr()
 @pytest.mark.asyncio
-async def test_evalgame_integration(ice_cream_players: list[EvalPlayer]) -> None:
+async def test_evalgame_integration(ice_cream_players: list[EvalPlayer], evaluation_agent: Agent[None, Any], model_settings: ModelSettings) -> None:
     """
     Test the EvalGame class.
     """
@@ -406,8 +396,8 @@ async def test_evalgame_integration(ice_cream_players: list[EvalPlayer]) -> None
 
     result = await game.run(
         players=(ice_cream_players[0], ice_cream_players[4]),
-        agent=EVALUATION_AGENT,
-        model_settings=MODEL_SETTINGS,
+        agent=evaluation_agent,
+        model_settings=model_settings,
     )
     logger.debug(f"Game result: {result}")
 
@@ -420,7 +410,9 @@ async def test_evalgame_integration(ice_cream_players: list[EvalPlayer]) -> None
 @pytest.mark.skip()
 @pytest.mark.vcr()
 @pytest.mark.asyncio
-async def test_evaltournament_integration(ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame) -> None:
+async def test_evaltournament_integration(
+    ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame, evaluation_agent: Agent[None, Any], model_settings: ModelSettings
+) -> None:
     """
     Test the EvalTournament class.
     """
@@ -440,8 +432,8 @@ async def test_evaltournament_integration(ice_cream_players: list[EvalPlayer], i
 
     # Test the default strategy
     players_with_scores = await tournament.run(
-        agent=EVALUATION_AGENT,
-        model_settings=MODEL_SETTINGS,
+        agent=evaluation_agent,
+        model_settings=model_settings,
     )
     assert isinstance(players_with_scores, list)
     for player in players_with_scores:
@@ -453,8 +445,8 @@ async def test_evaltournament_integration(ice_cream_players: list[EvalPlayer], i
 
     # Test the random sampling strategy
     players_with_scores = await tournament.run(
-        agent=EVALUATION_AGENT,
-        model_settings=MODEL_SETTINGS,
+        agent=evaluation_agent,
+        model_settings=model_settings,
         strategy=random_sampling_strategy,
         fraction_of_games=0.3,
     )
@@ -471,7 +463,13 @@ async def test_evaltournament_integration(ice_cream_players: list[EvalPlayer], i
 @pytest.mark.vcr()
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fraction_of_games", [None, 0.3, 42.0])  # Last value is non-sensical and will be ignored in the strategy.
-async def test_random_sampling_strategy(ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame, fraction_of_games: float | None) -> None:
+async def test_random_sampling_strategy(
+    ice_cream_players: list[EvalPlayer],
+    ice_cream_game: EvalGame,
+    evaluation_agent: Agent[None, Any],
+    model_settings: ModelSettings,
+    fraction_of_games: float | None,
+) -> None:
     """
     Test the random sampling tournament strategy.
     """
@@ -482,8 +480,8 @@ async def test_random_sampling_strategy(ice_cream_players: list[EvalPlayer], ice
     players_with_scores = await random_sampling_strategy(
         players=ice_cream_players,
         game=ice_cream_game,
-        agent=EVALUATION_AGENT,
-        model_settings=MODEL_SETTINGS,
+        agent=evaluation_agent,
+        model_settings=model_settings,
         fraction_of_games=fraction_of_games,
     )
     assert isinstance(players_with_scores, list)
@@ -498,7 +496,9 @@ async def test_random_sampling_strategy(ice_cream_players: list[EvalPlayer], ice
 @pytest.mark.skip()
 @pytest.mark.vcr()
 @pytest.mark.asyncio
-async def test_round_robin_strategy(ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame) -> None:
+async def test_round_robin_strategy(
+    ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame, evaluation_agent: Agent[None, Any], model_settings: ModelSettings
+) -> None:
     """
     Test the round robin tournament strategy.
     """
@@ -509,8 +509,8 @@ async def test_round_robin_strategy(ice_cream_players: list[EvalPlayer], ice_cre
     players_with_scores = await round_robin_strategy(
         players=ice_cream_players,
         game=ice_cream_game,
-        agent=EVALUATION_AGENT,
-        model_settings=MODEL_SETTINGS,
+        agent=evaluation_agent,
+        model_settings=model_settings,
         number_of_rounds=1,
     )
     assert isinstance(players_with_scores, list)
@@ -525,7 +525,9 @@ async def test_round_robin_strategy(ice_cream_players: list[EvalPlayer], ice_cre
 @pytest.mark.skip()
 @pytest.mark.vcr()
 @pytest.mark.asyncio
-async def test_adaptive_uncertainty_strategy(ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame) -> None:
+async def test_adaptive_uncertainty_strategy(
+    ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame, evaluation_agent: Agent[None, Any], model_settings: ModelSettings
+) -> None:
     """
     Test the adaptive uncertainty tournament strategy.
     """
@@ -536,8 +538,8 @@ async def test_adaptive_uncertainty_strategy(ice_cream_players: list[EvalPlayer]
     players_with_scores = await adaptive_uncertainty_strategy(
         players=ice_cream_players,
         game=ice_cream_game,
-        agent=EVALUATION_AGENT,
-        model_settings=MODEL_SETTINGS,
+        agent=evaluation_agent,
+        model_settings=model_settings,
         max_standard_deviation=1.0,
         alpha=0.01,
     )

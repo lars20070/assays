@@ -3,18 +3,27 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
 import pytest
 from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.settings import ModelSettings
 
-from assays.evaluators.bradleyterry import EvalGame, EvalPlayer, EvalTournament
+from assays.evaluators.bradleyterry import EVALUATION_INSTRUCTIONS, EvalGame, EvalPlayer, EvalTournament
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from unittest.mock import AsyncMock, MagicMock
 
     from pytest_mock import MockerFixture
+
+
+@pytest.fixture
+def model_settings() -> ModelSettings:
+    """Provide deterministic model settings for VCR-compatible tests."""
+    return ModelSettings(temperature=0.0, timeout=300)
 
 
 @pytest.fixture
@@ -45,6 +54,27 @@ def ice_cream_tournament(ice_cream_players: list[EvalPlayer], ice_cream_game: Ev
 def mock_pydantic_agent(mocker: MockerFixture) -> MagicMock:
     """Provide a MagicMock spec'd to pydantic_ai.Agent for tournament tests."""
     return mocker.MagicMock(spec=Agent)
+
+
+@pytest.fixture
+def evaluation_model() -> OpenAIChatModel:
+    """Provide the OpenAI-compatible model pointing at local Ollama."""
+    return OpenAIChatModel(
+        model_name="qwen2.5:14b",
+        provider=OpenAIProvider(base_url="http://localhost:11434/v1"),
+    )
+
+
+@pytest.fixture
+def evaluation_agent(evaluation_model: OpenAIChatModel) -> Agent[None, Any]:
+    """Provide the evaluation agent used by integration tests."""
+    return Agent(
+        model=evaluation_model,
+        output_type=Literal["A", "B"],
+        system_prompt=EVALUATION_INSTRUCTIONS,
+        retries=5,
+        instrument=True,
+    )
 
 
 @pytest.fixture
