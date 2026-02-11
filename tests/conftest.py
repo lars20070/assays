@@ -5,7 +5,7 @@ import pytest
 from vcr.request import Request
 
 from assays.config import config
-from assays.evals import EvalGame, EvalPlayer
+from assays.evaluators.bradleyterry import EvalGame, EvalPlayer
 
 
 @pytest.fixture(autouse=True)
