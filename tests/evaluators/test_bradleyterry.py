@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import inspect
 import random
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,9 +31,12 @@ from assays.evaluators.bradleyterry import (
     round_robin_strategy,
 )
 from assays.logger import logger
-from assays.plugin import BASELINE_DATASET_KEY, AssayContext
+from assays.plugin import BASELINE_DATASET_KEY, AssayContext, Readout
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+    from unittest.mock import AsyncMock
+
     from pytest_mock import MockerFixture
 
 MODEL_SETTINGS = ModelSettings(
@@ -88,6 +92,22 @@ class TestEvalPlayer:
         assert player.item == ""
 
 
+@pytest.fixture
+def make_mock_agent(mocker: MockerFixture) -> Callable[..., AsyncMock]:
+    """Factory fixture that returns a mock Agent configured to output a given value."""
+
+    def _make(output: str = "A") -> AsyncMock:
+        mock_result = mocker.MagicMock()
+        mock_result.output = output
+        mock_agent = mocker.AsyncMock(spec=Agent)
+        mock_agent.run = mocker.AsyncMock(return_value=mock_result)
+        mock_agent.__aenter__ = mocker.AsyncMock(return_value=mock_agent)
+        mock_agent.__aexit__ = mocker.AsyncMock(return_value=False)
+        return mock_agent
+
+    return _make
+
+
 class TestEvalGame:
     """Unit tests for EvalGame (agent interaction mocked)."""
 
@@ -96,19 +116,12 @@ class TestEvalGame:
         assert game.criterion == "Which answer is better?"
 
     @pytest.mark.asyncio
-    async def test_run_returns_winner_a(self, mocker: MockerFixture) -> None:
+    async def test_run_returns_winner_a(self, make_mock_agent: Callable[..., AsyncMock]) -> None:
         """When the agent picks A, the first player wins."""
         game = EvalGame(criterion="Which is better?")
         p1 = EvalPlayer(idx=0, item="alpha")
         p2 = EvalPlayer(idx=1, item="beta")
-
-        mock_result = mocker.MagicMock()
-        mock_result.output = "A"
-
-        mock_agent = mocker.AsyncMock(spec=Agent)
-        mock_agent.run = mocker.AsyncMock(return_value=mock_result)
-        mock_agent.__aenter__ = mocker.AsyncMock(return_value=mock_agent)
-        mock_agent.__aexit__ = mocker.AsyncMock(return_value=False)
+        mock_agent = make_mock_agent("A")
 
         result = await game.run(players=(p1, p2), agent=mock_agent, model_settings=MODEL_SETTINGS)
 
@@ -116,38 +129,24 @@ class TestEvalGame:
         mock_agent.run.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_run_returns_winner_b(self, mocker: MockerFixture) -> None:
+    async def test_run_returns_winner_b(self, make_mock_agent: Callable[..., AsyncMock]) -> None:
         """When the agent picks B, the second player wins."""
         game = EvalGame(criterion="Which is better?")
         p1 = EvalPlayer(idx=0, item="alpha")
         p2 = EvalPlayer(idx=1, item="beta")
-
-        mock_result = mocker.MagicMock()
-        mock_result.output = "B"
-
-        mock_agent = mocker.AsyncMock(spec=Agent)
-        mock_agent.run = mocker.AsyncMock(return_value=mock_result)
-        mock_agent.__aenter__ = mocker.AsyncMock(return_value=mock_agent)
-        mock_agent.__aexit__ = mocker.AsyncMock(return_value=False)
+        mock_agent = make_mock_agent("B")
 
         result = await game.run(players=(p1, p2), agent=mock_agent, model_settings=MODEL_SETTINGS)
 
         assert result == (1, 0)
 
     @pytest.mark.asyncio
-    async def test_run_prompt_contains_player_items(self, mocker: MockerFixture) -> None:
+    async def test_run_prompt_contains_player_items(self, make_mock_agent: Callable[..., AsyncMock]) -> None:
         """The prompt passed to the agent must include both player items and the criterion."""
         game = EvalGame(criterion="creativity")
         p1 = EvalPlayer(idx=0, item="vanilla")
         p2 = EvalPlayer(idx=1, item="miso caramel")
-
-        mock_result = mocker.MagicMock()
-        mock_result.output = "A"
-
-        mock_agent = mocker.AsyncMock(spec=Agent)
-        mock_agent.run = mocker.AsyncMock(return_value=mock_result)
-        mock_agent.__aenter__ = mocker.AsyncMock(return_value=mock_agent)
-        mock_agent.__aexit__ = mocker.AsyncMock(return_value=False)
+        mock_agent = make_mock_agent("A")
 
         await game.run(players=(p1, p2), agent=mock_agent, model_settings=MODEL_SETTINGS)
 
@@ -158,19 +157,12 @@ class TestEvalGame:
         assert "creativity" in prompt
 
     @pytest.mark.asyncio
-    async def test_run_preserves_player_idx_order(self, mocker: MockerFixture) -> None:
+    async def test_run_preserves_player_idx_order(self, make_mock_agent: Callable[..., AsyncMock]) -> None:
         """Result tuple uses the actual player idx values, not positional indices."""
         game = EvalGame(criterion="test")
         p1 = EvalPlayer(idx=7, item="x")
         p2 = EvalPlayer(idx=3, item="y")
-
-        mock_result = mocker.MagicMock()
-        mock_result.output = "A"
-
-        mock_agent = mocker.AsyncMock(spec=Agent)
-        mock_agent.run = mocker.AsyncMock(return_value=mock_result)
-        mock_agent.__aenter__ = mocker.AsyncMock(return_value=mock_agent)
-        mock_agent.__aexit__ = mocker.AsyncMock(return_value=False)
+        mock_agent = make_mock_agent("A")
 
         result = await game.run(players=(p1, p2), agent=mock_agent, model_settings=MODEL_SETTINGS)
 
@@ -185,21 +177,15 @@ class TestEvalTournament:
         assert len(tournament.players) == 5
         assert tournament.game.criterion == ice_cream_game.criterion
 
-    def test_get_player_by_idx(self, ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame) -> None:
+    @pytest.mark.parametrize(
+        ("idx", "expected_item"),
+        [(0, "vanilla"), (3, "peach"), (4, "toasted rice & miso caramel ice cream")],
+    )
+    def test_get_player_by_idx(self, ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame, idx: int, expected_item: str) -> None:
         tournament = EvalTournament(players=ice_cream_players, game=ice_cream_game)
-        player = tournament.get_player_by_idx(3)
-        assert player.idx == 3
-        assert player.item == "peach"
-
-    def test_get_player_by_idx_first(self, ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame) -> None:
-        tournament = EvalTournament(players=ice_cream_players, game=ice_cream_game)
-        player = tournament.get_player_by_idx(0)
-        assert player.item == "vanilla"
-
-    def test_get_player_by_idx_last(self, ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame) -> None:
-        tournament = EvalTournament(players=ice_cream_players, game=ice_cream_game)
-        player = tournament.get_player_by_idx(4)
-        assert player.item == "toasted rice & miso caramel ice cream"
+        player = tournament.get_player_by_idx(idx)
+        assert player.idx == idx
+        assert player.item == expected_item
 
     def test_get_player_by_idx_not_found(self, ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame) -> None:
         tournament = EvalTournament(players=ice_cream_players, game=ice_cream_game)
@@ -351,8 +337,7 @@ class TestBradleyTerryEvaluator:
 
         result = await evaluator(mock_item)
 
-        # Check result by attribute presence (module reload can cause isinstance to fail)
-        assert type(result).__name__ == "Readout"
+        assert isinstance(result, Readout)
         assert result.passed is True
         assert result.details is not None
         assert result.details.get("message") == "No players to evaluate"
@@ -407,16 +392,17 @@ class TestBradleyTerryEvaluator:
         assert "model_settings" in run_kwargs
         assert run_kwargs["max_standard_deviation"] == 1.5
 
-        # Verify result (use type name check due to module reload)
-        assert type(result).__name__ == "Readout"
+        assert isinstance(result, Readout)
+        # passed is False because the mock uses a single player (score=0.75) for both
+        # novel and baseline; novel must strictly exceed baseline to pass.
         assert result.passed is False
 
     @pytest.mark.asyncio
     async def test_protocol_conformance(self) -> None:
         """Test BradleyTerryEvaluator conforms to Evaluator Protocol."""
         evaluator = BradleyTerryEvaluator()
-        # Should be callable with Item and return Coroutine[Any, Any, Readout]
         assert callable(evaluator)
+        assert inspect.iscoroutinefunction(evaluator.__call__)
 
 
 # ---------------------------------------------------------------------------
