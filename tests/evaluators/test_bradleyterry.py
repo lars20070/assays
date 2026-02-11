@@ -92,22 +92,6 @@ class TestEvalPlayer:
         assert player.item == ""
 
 
-@pytest.fixture
-def make_mock_agent(mocker: MockerFixture) -> Callable[..., AsyncMock]:
-    """Factory fixture that returns a mock Agent configured to output a given value."""
-
-    def _make(output: str = "A") -> AsyncMock:
-        mock_result = mocker.MagicMock()
-        mock_result.output = output
-        mock_agent = mocker.AsyncMock(spec=Agent)
-        mock_agent.run = mocker.AsyncMock(return_value=mock_result)
-        mock_agent.__aenter__ = mocker.AsyncMock(return_value=mock_agent)
-        mock_agent.__aexit__ = mocker.AsyncMock(return_value=False)
-        return mock_agent
-
-    return _make
-
-
 class TestEvalGame:
     """Unit tests for EvalGame (agent interaction mocked)."""
 
@@ -172,44 +156,47 @@ class TestEvalGame:
 class TestEvalTournament:
     """Unit tests for EvalTournament (strategy mocked)."""
 
-    def test_construction(self, ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame) -> None:
-        tournament = EvalTournament(players=ice_cream_players, game=ice_cream_game)
-        assert len(tournament.players) == 5
-        assert tournament.game.criterion == ice_cream_game.criterion
+    def test_construction(self, ice_cream_tournament: EvalTournament, ice_cream_game: EvalGame) -> None:
+        assert len(ice_cream_tournament.players) == 5
+        assert ice_cream_tournament.game.criterion == ice_cream_game.criterion
 
     @pytest.mark.parametrize(
         ("idx", "expected_item"),
         [(0, "vanilla"), (3, "peach"), (4, "toasted rice & miso caramel ice cream")],
     )
-    def test_get_player_by_idx(self, ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame, idx: int, expected_item: str) -> None:
-        tournament = EvalTournament(players=ice_cream_players, game=ice_cream_game)
-        player = tournament.get_player_by_idx(idx)
+    def test_get_player_by_idx(self, ice_cream_tournament: EvalTournament, idx: int, expected_item: str) -> None:
+        player = ice_cream_tournament.get_player_by_idx(idx)
         assert player.idx == idx
         assert player.item == expected_item
 
-    def test_get_player_by_idx_not_found(self, ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame) -> None:
-        tournament = EvalTournament(players=ice_cream_players, game=ice_cream_game)
+    def test_get_player_by_idx_not_found(self, ice_cream_tournament: EvalTournament) -> None:
         with pytest.raises(ValueError, match="Player with unique identifier 99 not found"):
-            tournament.get_player_by_idx(99)
+            ice_cream_tournament.get_player_by_idx(99)
 
     @pytest.mark.asyncio
-    async def test_run_uses_default_strategy(self, mocker: MockerFixture, ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame) -> None:
+    async def test_run_uses_default_strategy(
+        self, mocker: MockerFixture, ice_cream_tournament: EvalTournament, ice_cream_players: list[EvalPlayer], mock_pydantic_agent: MagicMock
+    ) -> None:
         """When no strategy is passed, adaptive_uncertainty_strategy is used."""
         scored = [EvalPlayer(idx=p.idx, item=p.item, score=float(i)) for i, p in enumerate(ice_cream_players)]
         mock_strategy = mocker.AsyncMock(return_value=scored)
         mocker.patch("assays.evaluators.bradleyterry.adaptive_uncertainty_strategy", mock_strategy)
 
-        tournament = EvalTournament(players=ice_cream_players, game=ice_cream_game)
-        mock_agent = mocker.MagicMock(spec=Agent)
-
-        result = await tournament.run(agent=mock_agent, model_settings=MODEL_SETTINGS)
+        result = await ice_cream_tournament.run(agent=mock_pydantic_agent, model_settings=MODEL_SETTINGS)
 
         mock_strategy.assert_awaited_once()
         assert len(result) == 5
         assert all(p.score is not None for p in result)
 
     @pytest.mark.asyncio
-    async def test_run_uses_custom_strategy(self, mocker: MockerFixture, ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame) -> None:
+    async def test_run_uses_custom_strategy(
+        self,
+        mocker: MockerFixture,
+        ice_cream_tournament: EvalTournament,
+        ice_cream_players: list[EvalPlayer],
+        ice_cream_game: EvalGame,
+        mock_pydantic_agent: MagicMock,
+    ) -> None:
         """A custom strategy function receives the correct arguments."""
         scored = [EvalPlayer(idx=p.idx, item=p.item, score=float(i)) for i, p in enumerate(ice_cream_players)]
 
@@ -219,20 +206,19 @@ class TestEvalTournament:
         spy = mocker.AsyncMock(side_effect=fake_strategy)
         spy.__name__ = "fake_strategy"
 
-        tournament = EvalTournament(players=ice_cream_players, game=ice_cream_game)
-        mock_agent = mocker.MagicMock(spec=Agent)
-
-        result = await tournament.run(agent=mock_agent, model_settings=MODEL_SETTINGS, strategy=spy)
+        result = await ice_cream_tournament.run(agent=mock_pydantic_agent, model_settings=MODEL_SETTINGS, strategy=spy)
 
         spy.assert_awaited_once()
         call_args = spy.call_args
         assert call_args[0][0] == ice_cream_players  # players
         assert call_args[0][1] is ice_cream_game  # game
-        assert call_args[0][2] is mock_agent  # agent
+        assert call_args[0][2] is mock_pydantic_agent  # agent
         assert result == scored
 
     @pytest.mark.asyncio
-    async def test_run_forwards_strategy_kwargs(self, mocker: MockerFixture, ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame) -> None:
+    async def test_run_forwards_strategy_kwargs(
+        self, ice_cream_tournament: EvalTournament, ice_cream_players: list[EvalPlayer], mock_pydantic_agent: MagicMock
+    ) -> None:
         """Extra kwargs are forwarded to the strategy function."""
         scored = [EvalPlayer(idx=p.idx, item=p.item, score=0.0) for p in ice_cream_players]
 
@@ -244,11 +230,8 @@ class TestEvalTournament:
 
         capture_strategy.__name__ = "capture_strategy"
 
-        tournament = EvalTournament(players=ice_cream_players, game=ice_cream_game)
-        mock_agent = mocker.MagicMock(spec=Agent)
-
-        await tournament.run(
-            agent=mock_agent,
+        await ice_cream_tournament.run(
+            agent=mock_pydantic_agent,
             model_settings=MODEL_SETTINGS,
             strategy=capture_strategy,
             max_standard_deviation=1.5,
@@ -258,18 +241,17 @@ class TestEvalTournament:
         assert received_kwargs == {"max_standard_deviation": 1.5, "alpha": 0.2}
 
     @pytest.mark.asyncio
-    async def test_run_updates_players_attribute(self, mocker: MockerFixture, ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame) -> None:
+    async def test_run_updates_players_attribute(
+        self, mocker: MockerFixture, ice_cream_tournament: EvalTournament, ice_cream_players: list[EvalPlayer], mock_pydantic_agent: MagicMock
+    ) -> None:
         """After run(), tournament.players is updated with the scored players."""
         scored = [EvalPlayer(idx=p.idx, item=p.item, score=float(i) * 0.5) for i, p in enumerate(ice_cream_players)]
         mock_strategy = mocker.AsyncMock(return_value=scored)
         mock_strategy.__name__ = "mock_strategy"
 
-        tournament = EvalTournament(players=ice_cream_players, game=ice_cream_game)
-        mock_agent = mocker.MagicMock(spec=Agent)
+        await ice_cream_tournament.run(agent=mock_pydantic_agent, model_settings=MODEL_SETTINGS, strategy=mock_strategy)
 
-        await tournament.run(agent=mock_agent, model_settings=MODEL_SETTINGS, strategy=mock_strategy)
-
-        assert tournament.players is scored
+        assert ice_cream_tournament.players is scored
 
 
 class TestBradleyTerryEvaluator:

@@ -5,7 +5,6 @@ import pytest
 from vcr.request import Request
 
 from assays.config import config
-from assays.evaluators.bradleyterry import EvalGame, EvalPlayer
 
 
 @pytest.fixture(autouse=True)
@@ -16,28 +15,6 @@ def config_for_testing(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None,
     monkeypatch.setattr(config, "logs2logfire", False)
 
     yield
-
-
-@pytest.fixture
-def ice_cream_players() -> list[EvalPlayer]:
-    """
-    Provide a list of EvalPlayer instances with ice cream flavours.
-    """
-    return [
-        EvalPlayer(idx=0, item="vanilla"),
-        EvalPlayer(idx=1, item="chocolate"),
-        EvalPlayer(idx=2, item="strawberry"),
-        EvalPlayer(idx=3, item="peach"),
-        EvalPlayer(idx=4, item="toasted rice & miso caramel ice cream"),
-    ]
-
-
-@pytest.fixture
-def ice_cream_game() -> EvalGame:
-    """
-    Provide an EvalGame instance for ice cream flavour comparison.
-    """
-    return EvalGame(criterion="Which of the two ice cream flavours A or B is more creative?")
 
 
 @pytest.fixture
