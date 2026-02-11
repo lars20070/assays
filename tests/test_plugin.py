@@ -798,12 +798,14 @@ def test_pytest_runtest_teardown_runs_evaluation(mocker: MockerFixture, tmp_path
     assert readout_data["details"] == {"test_key": "test_value"}
 
 
-def test_pytest_runtest_teardown_uses_default_evaluator(mocker: MockerFixture) -> None:
+def test_pytest_runtest_teardown_uses_default_evaluator(mocker: MockerFixture, tmp_path: Path) -> None:
     """Test pytest_runtest_teardown uses BradleyTerryEvaluator() as default."""
     dataset = Dataset[dict[str, str], type[None], Any](cases=[])
+    assay_path = tmp_path / "assays" / "test_module" / "test_func.json"
+    assay_path.parent.mkdir(parents=True, exist_ok=True)
 
     mock_item = mocker.MagicMock(spec=Function)
-    mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=Path("/tmp/test.json"), assay_mode="evaluate")}
+    mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=assay_path, assay_mode="evaluate")}
     mock_item.stash = {
         assays.plugin.AGENT_RESPONSES_KEY: [],
         BASELINE_DATASET_KEY: dataset,
@@ -814,16 +816,16 @@ def test_pytest_runtest_teardown_uses_default_evaluator(mocker: MockerFixture) -
 
     mocker.patch("assays.plugin._is_assay", return_value=True)
     mock_logger = mocker.patch("assays.plugin.logger")
-    # Mock the tournament to avoid actual API calls
-    mock_tournament_class = mocker.patch("assays.plugin.EvalTournament")
-    mock_tournament = mocker.MagicMock()
-    mock_tournament.run = AsyncMock(return_value=[])
-    mock_tournament.get_player_by_idx = MagicMock(return_value=MagicMock(score=0.5))
-    mock_tournament_class.return_value = mock_tournament
+
+    # Mock BradleyTerryEvaluator so the default evaluator is a mock we control
+    mock_bt_evaluator = AsyncMock(return_value=Readout(passed=True, details={"default": True}))
+    mocker.patch("assays.plugin.BradleyTerryEvaluator", return_value=mock_bt_evaluator)
 
     # Drive the hookwrapper generator
     _drive_hookwrapper(mock_item, None)
 
+    # The default BradleyTerryEvaluator instance should have been called
+    mock_bt_evaluator.assert_called_once_with(mock_item)
     # Should log evaluation completed (no error)
     assert any("Evaluation result" in str(call) for call in mock_logger.info.call_args_list)
 
