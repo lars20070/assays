@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import math
 import random
-import textwrap
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -82,6 +81,9 @@ Do NOT include explanations, reasoning, or any other fields.
 """
 
 
+EVALUATION_GAME_PROMPT = "<QUESTION> {criterion} </QUESTION>\n<A> {a} </A>\n<B> {b} </B>"
+
+
 class EvalPlayer(BaseModel):
     idx: int = Field(..., description="unique identifier for the player")
     item: str = Field(..., description="item to be scored")
@@ -92,11 +94,7 @@ class EvalGame(BaseModel):
     criterion: str = Field(..., description="evaluation criterion on which players should be judged")
 
     async def run(self, players: tuple[EvalPlayer, EvalPlayer], agent: Agent[None, Any], model_settings: ModelSettings) -> tuple[int, int]:
-        prompt = textwrap.dedent(f"""
-            <QUESTION> {self.criterion} </QUESTION>
-            <A> {players[0].item} </A>
-            <B> {players[1].item} </B>
-        """)
+        prompt = EVALUATION_GAME_PROMPT.format(criterion=self.criterion, a=players[0].item, b=players[1].item)
 
         async with agent:
             result = await agent.run(
@@ -404,7 +402,7 @@ class EvalTournament(BaseModel):
         Args:
             agent: Agent for the evaluation game.
             model_settings: Model settings for the evaluation game.
-            strategy: Function with the tournament algorithm.
+            strategy: Function with the tournament algorithm. Defaults to the adaptive uncertainty strategy.
             **strategy_kwargs: Additional arguments passed to the strategy function.
 
         Returns:
@@ -438,19 +436,19 @@ class BradleyTerryEvaluator:
     def __init__(
         self,
         model: str | OpenAIChatModel | None = None,
-        criterion: str = "Which of the two search queries shows more genuine curiosity and creativity, and is less formulaic?",
+        criterion: str = "Which of the two agent responses is better?",
         max_standard_deviation: float = 2.0,
     ) -> None:
         """Configure the evaluator.
 
         Args:
-            model: The language model or model string to use for evaluation. Defaults to qwen3:8b on Ollama.
+            model: The language model or model string to use for evaluation. Defaults to qwen2.5:14b on Ollama.
             criterion: The evaluation criterion for pairwise comparison.
             max_standard_deviation: Convergence threshold for adaptive strategy.
         """
         if model is None:
             self.model = OpenAIChatModel(
-                model_name="qwen3:8b",
+                model_name="qwen2.5:14b",
                 provider=OpenAIProvider(base_url="http://localhost:11434/v1"),  # Local Ollama server
             )
         else:
