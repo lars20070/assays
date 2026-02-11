@@ -60,7 +60,8 @@ def vcr_config() -> dict[str, object]:
         return request
 
     return {
-        "ignore_localhost": False,  # We want to record local SearXNG and Ollama requests.
+        "ignore_localhost": False,  # We want to record local Ollama requests.
+        "ignore_hosts": ["logfire-eu.pydantic.dev", "logfire.pydantic.dev"],  # We don't want to record requests to Logfire.
         "filter_headers": ["authorization", "x-api-key"],
         "decode_compressed_response": True,
         "before_record_request": uri_spoofing,
