@@ -5,8 +5,7 @@ import math
 import random
 import textwrap
 from collections.abc import Awaitable, Callable
-from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import choix
 import numpy as np
@@ -24,16 +23,6 @@ if TYPE_CHECKING:
     from assays.plugin import Readout
 
 
-class Response(StrEnum):
-    joke = "joke"
-    nojoke = "no joke"
-
-
-class GameResult(StrEnum):
-    A = "A"
-    B = "B"
-
-
 EVALUATION_INSTRUCTIONS = """
 You are presented with a question and two possible answers A and B. Evaluate carefully whether answer A or answer B is the better reply.
 You have got only these two options. Your evaluations contribute to Bradley-Terry scores across multiple items. Consistency and
@@ -42,29 +31,29 @@ objectivity are critical for reliable rankings. Each comparison should be indepe
 <EXAMPLES>
 Example 1:
 <QUESTION> Which of the two ice cream flavours below is more creative? </QUESTION>
-<A> Vanilla </A> 
+<A> Vanilla </A>
 <B> Pickled Citrus Ribbon </B>
 Expected output:
 {
-    "response": "B",
+    "response": "B"
 }
 
 Example 2:
 <QUESTION> Which search query shows more genuine curiosity? </QUESTION>
-<A> effect of ocean acidification feedback loops on Arctic methane release </A> 
+<A> effect of ocean acidification feedback loops on Arctic methane release </A>
 <B> climate change effects </B>
 Expected output:
 {
-    "response": "A",
+    "response": "A"
 }
 
 Example 3:
 <QUESTION> Which reply is more insulting? </QUESTION>
-<A> Your argument lacks logical coherence and fails to address the core issue at hand. </A> 
+<A> Your argument lacks logical coherence and fails to address the core issue at hand. </A>
 <B> That's an interesting perspective, though I see it differently. </B>
 Expected output:
 {
-    "response": "A",
+    "response": "A"
 }
 </EXAMPLES>
 
@@ -79,11 +68,13 @@ Expected output:
 You must respond with valid JSON containing exactly one field called "response" with value "A" or "B":
 
 {
-    "response": "A",
+    "response": "A"
 }
+
 or
+
 {
-    "response": "B",
+    "response": "B"
 }
 
 Do NOT include explanations, reasoning, or any other fields.
@@ -99,7 +90,7 @@ model = OpenAIChatModel(
 
 EVALUATION_AGENT = Agent(
     model=model,
-    output_type=GameResult,
+    output_type=Literal["A", "B"],
     system_prompt=EVALUATION_INSTRUCTIONS,
     retries=5,
     instrument=True,
@@ -115,7 +106,7 @@ class EvalPlayer(BaseModel):
 class EvalGame(BaseModel):
     criterion: str = Field(..., description="evaluation criterion on which players should be judged")
 
-    async def run(self, players: tuple[EvalPlayer, EvalPlayer], agent: Agent, model_settings: ModelSettings) -> tuple[int, int]:
+    async def run(self, players: tuple[EvalPlayer, EvalPlayer], agent: Agent[None, Any], model_settings: ModelSettings) -> tuple[int, int]:
         prompt = textwrap.dedent(f"""
             <QUESTION> {self.criterion} </QUESTION>
             <A> {players[0].item} </A>
@@ -128,14 +119,14 @@ class EvalGame(BaseModel):
                 model_settings=model_settings,
             )
 
-        if result.output == GameResult.A:
+        if result.output == "A":
             return (players[0].idx, players[1].idx)
         else:
             return (players[1].idx, players[0].idx)
 
 
 TournamentStrategy = Callable[
-    [list[EvalPlayer], EvalGame, Agent, ModelSettings],
+    [list[EvalPlayer], EvalGame, Agent[None, Any], ModelSettings],
     Awaitable[list[EvalPlayer]],
 ]
 
@@ -143,7 +134,7 @@ TournamentStrategy = Callable[
 async def random_sampling_strategy(
     players: list[EvalPlayer],
     game: EvalGame,
-    agent: Agent,
+    agent: Agent[None, Any],
     model_settings: ModelSettings,
     fraction_of_games: float | None = None,
 ) -> list[EvalPlayer]:
@@ -201,7 +192,7 @@ async def random_sampling_strategy(
 async def round_robin_strategy(
     players: list[EvalPlayer],
     game: EvalGame,
-    agent: Agent,
+    agent: Agent[None, Any],
     model_settings: ModelSettings,
     number_of_rounds: int = 2,
 ) -> list[EvalPlayer]:
@@ -258,7 +249,7 @@ async def round_robin_strategy(
 async def adaptive_uncertainty_strategy(
     players: list[EvalPlayer],
     game: EvalGame,
-    agent: Agent,
+    agent: Agent[None, Any],
     model_settings: ModelSettings,
     max_standard_deviation: float = 2.0,
     alpha: float = 0.1,
@@ -414,7 +405,7 @@ class EvalTournament(BaseModel):
 
     async def run(
         self,
-        agent: Agent,
+        agent: Agent[None, Any],
         model_settings: ModelSettings,
         strategy: TournamentStrategy | None = None,
         **strategy_kwargs: Any,  # noqa: ANN401
@@ -493,28 +484,19 @@ class BradleyTerryEvaluator:
             <QUESTION> Which of the two ice cream flavours below is more creative? </QUESTION>
             <A> Vanilla </A>
             <B> Pickled Citrus Ribbon </B>
-            Expected output:
-            {
-                "response": "B",
-            }
+            Expected output: B
 
             Example 2:
             <QUESTION> Which search query shows more genuine curiosity? </QUESTION>
             <A> effect of ocean acidification feedback loops on Arctic methane release </A>
             <B> climate change effects </B>
-            Expected output:
-            {
-                "response": "A",
-            }
+            Expected output: A
 
             Example 3:
             <QUESTION> Which reply is more insulting? </QUESTION>
             <A> Your argument lacks logical coherence and fails to address the core issue at hand. </A>
             <B> That's an interesting perspective, though I see it differently. </B>
-            Expected output:
-            {
-                "response": "A",
-            }
+            Expected output: A
             </EXAMPLES>
 
             <REQUIREMENTS>
@@ -525,22 +507,14 @@ class BradleyTerryEvaluator:
             </REQUIREMENTS>
 
             <OUTPUT_FORMAT>
-            You must respond with valid JSON containing exactly one field called "response" with value "A" or "B":
+            Respond with exactly one letter: A or B
 
-            {
-                "response": "A",
-            }
-            or
-            {
-                "response": "B",
-            }
-
-            Do NOT include explanations, reasoning, or any other fields.
+            Do NOT include explanations, reasoning, quotes, or any other text.
             </OUTPUT_FORMAT>
             """
         self.agent = Agent(
             model=self.model,
-            output_type=GameResult,
+            output_type=Literal["A", "B"],
             system_prompt=self.system_prompt,
             retries=5,
             instrument=True,

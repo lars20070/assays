@@ -1,0 +1,68 @@
+interactions:
+- request:
+    body: !!binary |
+      H4sIABCJjGkC/81VTWgkRRTO3+5m32z+Ohs3u1G200t0N8TemZ7pyUxAcN2LNB4WWQ8SwlDTXZOp
+      pLu6t6s6cQyDIAS8iH+IF8+irnjw5EW8CB4W9iZ4FD16EAQRRNBXPd0zkyGLghfnkq73V9/73lcv
+      8N0CfD0JdVgUND5gLjUZF5Jw9eFpBujlUq3WKjVbm57nVprEJpVandRrxK5W3GKlTMGAxyT1aUBl
+      3DGFt2/6hO8mZJdq03A26sh2yGENtJMxnARUm4OZMKK874FVWDoZdkBjwUKuKpXMct0sYciFHGha
+      YwHmEr7Pw0PeyOywCIUoDl0qhBlhD1PLx7+cwbyLuTFOuGRBln8ezrkZyGtwaTRk6P6yWbLMGrwE
+      K6NBHhVuzCKpAqtQ6QXq1wPC+IbuEK6XKrpVtOwN3Spvlatbdu2Gvn1bsaSXsCWzqu/AMzCXt5Xf
+      uQ7XLatFLNurkKrn0ma92LKsZq1SI5v2ZpN4rkvserFsV8ra27OwhF13PIKQ3KcJ05Avu2oWtXcm
+      YH78wxd+Z7NvNu7ffP6vD66+1tWm73/5/UcfP3h4bEz/evxF8NUnN/5cP48T41LHporj9TfWvjH3
+      7PeWb+UfzgpAEHrUb6SszUDh3iHllmlvbVpNZwkgze45z8GZ9OQ8Dgv4t0GYmZ7Nk94rUPDD3RaL
+      qRmIXa0AAwTONVjIfSIivCE7EdVm4QKqxWN8t6GMzk24nAfl9ojECgZOXYP54sjv1bHj8bHxsTHt
+      x8JpnPz2g5Z8u/S+ZUzLP55d/ux1ent93m0TqQ91Wpys31n5qUdN/uFchaWsTVRzTJQOeq2ehSlV
+      wNHhYhaA0jlgHo17flSV0j9hzmWYySJER0gaDLnW+skxvZdQIc10DqMjeAJmlYCwNPG8GOWpCPVD
+      l/jtUEhHg0LmjsJYapPLn77s/DwFy72ZZpUVfYhLogC1h1PwYOrIaCXcVQ01ZBj6wtjSt3c2dKOZ
+      MF+yEWOYyCiRDVURTYbyGQNz2NyjrkQHT3x/YO5XODIUJSqxxThRkETiS1VgAKqxJxCJcNs0IBh5
+      ZCCdyLhkVKRHzIlCLmh6oDwJVGHjlirynKEgKhmpK4SMUS1Gt4s21TtKyEtj+xWGozPoaEFqmWKD
+      +HeGb24RX1BVa2gTqMS7baqn3eh5Xf2wzdy2jmoVumwzobshV+89FU3GFo1TuXsNj7mysU87qlQf
+      2EYPfUqljBOqzmp6+O6Jn2NB4z7jXgo+5VmlIYfEI5IMZqC2F/ozQ1f1jIwGkcTL8/nQIPKJpIMk
+      4vvhIdpfkVnM0KU9HwvwIY84u84+LOavdWiM2l148egUpkcm+yiZps6R7G6363w+AZeyV6MUhisa
+      55COTmjvTsBbE9uDtFzi6tpHafC/D3YE8/9Kud0d5ym4MrJl1OTVNkti/Ce5Opb9/t1mXj252nEX
+      jy7Sf1zeLatmN62q1/RI3aq3XOfJ/pbNWz11EeZL/m+7+HLH2AgAAA==
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate, br
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Length:
+      - '1123'
+      Content-Type:
+      - application/x-protobuf
+      User-Agent:
+      - logfire/4.22.0
+    method: POST
+    uri: https://logfire-eu.pydantic.dev/v1/traces
+  response:
+    body:
+      string: ''
+    headers:
+      CF-RAY:
+      - 9cc450497d677dd2-ZRH
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '0'
+      Date:
+      - Wed, 11 Feb 2026 13:50:08 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=qiJLWJN3EZH9ZHGMQocXQhdns%2Bc9DeLiVKuuB4a2vcAmYhEZ3%2F93b5SElBFDIRknTkdtCUJPteJZTsKMNzmf3ryR1oLMwDrKKgan9mqWmPz8Q5zZiVQ%3D"}]}'
+      Server:
+      - cloudflare
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - origin, access-control-request-method, access-control-request-headers
+      via:
+      - 1.1 google
+    status:
+      code: 200
+      message: OK
+version: 1

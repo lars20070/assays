@@ -54,19 +54,28 @@ class PairwiseEvaluator:
             <QUESTION> Which of the two ice cream flavours below is more creative? </QUESTION>
             <A> Vanilla </A>
             <B> Pickled Citrus Ribbon </B>
-            Expected output: B
+            Expected output:
+            {
+                "response": "B"
+            }
 
             Example 2:
             <QUESTION> Which search query shows more genuine curiosity? </QUESTION>
             <A> effect of ocean acidification feedback loops on Arctic methane release </A>
             <B> climate change effects </B>
-            Expected output: A
+            Expected output:
+            {
+                "response": "A"
+            }
 
             Example 3:
             <QUESTION> Which reply is more insulting? </QUESTION>
             <A> Your argument lacks logical coherence and fails to address the core issue at hand. </A>
             <B> That's an interesting perspective, though I see it differently. </B>
-            Expected output: A
+            Expected output:
+            {
+                "response": "A"
+            }
             </EXAMPLES>
 
             <REQUIREMENTS>
@@ -77,9 +86,19 @@ class PairwiseEvaluator:
             </REQUIREMENTS>
 
             <OUTPUT_FORMAT>
-            Respond with exactly one letter: A or B
+            You must respond with valid JSON containing exactly one field called "response" with value "A" or "B":
 
-            Do NOT include explanations, reasoning, quotes, or any other text.
+            {
+                "response": "A"
+            }
+
+            or
+
+            {
+                "response": "B"
+            }
+
+            Do NOT include explanations, reasoning, or any other fields.
             </OUTPUT_FORMAT>
             """
         self.agent = Agent(

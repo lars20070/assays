@@ -220,8 +220,7 @@ def test_bradley_terry_evaluator_init_defaults() -> None:
     assert evaluator.model_settings.get("timeout") == 300
     # system_prompt
     assert evaluator.system_prompt is not None
-    assert "response" in evaluator.system_prompt
-    assert "A" in evaluator.system_prompt and "B" in evaluator.system_prompt
+    assert "Respond with exactly one letter: A or B" in evaluator.system_prompt
     # agent
     assert evaluator.agent is not None
     # criterion and max_standard_deviation
