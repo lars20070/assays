@@ -6,10 +6,11 @@ from __future__ import annotations
 import random
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 from unittest.mock import MagicMock
 
 import pytest
+from pydantic_ai import Agent
 from pydantic_ai.agent import AgentRunResult
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -19,7 +20,7 @@ from pytest import Function
 
 import assays.plugin
 from assays.evaluators.bradleyterry import (
-    EVALUATION_AGENT,
+    EVALUATION_INSTRUCTIONS,
     BradleyTerryEvaluator,
     EvalGame,
     EvalPlayer,
@@ -37,6 +38,20 @@ if TYPE_CHECKING:
 MODEL_SETTINGS = ModelSettings(
     temperature=0.0,  # Model needs to be deterministic for VCR recording to work.
     timeout=300,
+)
+
+MODEL = OpenAIChatModel(
+    model_name="qwen2.5:72b",
+    provider=OpenAIProvider(base_url="http://localhost:11434/v1"),  # Local Ollama server
+)
+
+
+EVALUATION_AGENT = Agent(
+    model=MODEL,
+    output_type=Literal["A", "B"],
+    system_prompt=EVALUATION_INSTRUCTIONS,
+    retries=5,
+    instrument=True,
 )
 
 
