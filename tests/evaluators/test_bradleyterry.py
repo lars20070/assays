@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import inspect
-import random
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
@@ -379,11 +378,12 @@ class TestBradleyTerryEvaluator:
 
 
 # ---------------------------------------------------------------------------
-# Integration tests for EvalGame and EvalTournament
+# Integration tests for EvalGame, EvalTournament and the three tournament strategies
+# Requires a local Ollama instance with the qwen2.5:14b model available. Skipped in the CI pipeline.
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.vcr()
+@pytest.mark.ollama
 @pytest.mark.asyncio
 async def test_evalgame_integration(ice_cream_players: list[EvalPlayer], evaluation_agent: Agent[None, Any], model_settings: ModelSettings) -> None:
     """
@@ -407,8 +407,7 @@ async def test_evalgame_integration(ice_cream_players: list[EvalPlayer], evaluat
     assert result[0] == 4  # Toasted rice & miso caramel ice cream flavour is more creative.
 
 
-@pytest.mark.skip()
-@pytest.mark.vcr()
+@pytest.mark.ollama
 @pytest.mark.asyncio
 async def test_evaltournament_integration(
     ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame, evaluation_agent: Agent[None, Any], model_settings: ModelSettings
@@ -416,8 +415,6 @@ async def test_evaltournament_integration(
     """
     Test the EvalTournament class.
     """
-    random.seed(42)  # Make test deterministic for VCR recording
-
     logger.info("Testing EvalTournament() class")
 
     tournament = EvalTournament(players=ice_cream_players, game=ice_cream_game)
@@ -459,8 +456,7 @@ async def test_evaltournament_integration(
         logger.debug(f"Player {player.idx} score: {player.score}")
 
 
-@pytest.mark.skip()
-@pytest.mark.vcr()
+@pytest.mark.ollama
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fraction_of_games", [None, 0.3, 42.0])  # Last value is non-sensical and will be ignored in the strategy.
 async def test_random_sampling_strategy(
@@ -473,8 +469,6 @@ async def test_random_sampling_strategy(
     """
     Test the random sampling tournament strategy.
     """
-    random.seed(42)  # Make test deterministic for VCR recording
-
     logger.info("Testing random_sampling_strategy()")
 
     players_with_scores = await random_sampling_strategy(
@@ -493,8 +487,7 @@ async def test_random_sampling_strategy(
         logger.debug(f"Player {player.idx} score: {player.score}")
 
 
-@pytest.mark.skip()
-@pytest.mark.vcr()
+@pytest.mark.ollama
 @pytest.mark.asyncio
 async def test_round_robin_strategy(
     ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame, evaluation_agent: Agent[None, Any], model_settings: ModelSettings
@@ -502,8 +495,6 @@ async def test_round_robin_strategy(
     """
     Test the round robin tournament strategy.
     """
-    random.seed(42)  # Make test deterministic for VCR recording
-
     logger.info("Testing round_robin_strategy()")
 
     players_with_scores = await round_robin_strategy(
@@ -522,8 +513,7 @@ async def test_round_robin_strategy(
         logger.debug(f"Player {player.idx} score: {player.score}")
 
 
-@pytest.mark.skip()
-@pytest.mark.vcr()
+@pytest.mark.ollama
 @pytest.mark.asyncio
 async def test_adaptive_uncertainty_strategy(
     ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame, evaluation_agent: Agent[None, Any], model_settings: ModelSettings
@@ -531,8 +521,6 @@ async def test_adaptive_uncertainty_strategy(
     """
     Test the adaptive uncertainty tournament strategy.
     """
-    random.seed(42)  # Make test deterministic for VCR recording
-
     logger.info("Testing adaptive_uncertainty_strategy()")
 
     players_with_scores = await adaptive_uncertainty_strategy(
