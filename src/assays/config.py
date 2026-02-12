@@ -10,6 +10,8 @@ load_dotenv()
 class Config(BaseSettings):
     """Configuration settings for the application."""
 
+    ollama_base_url: str = Field(default="http://localhost:11434", description="Base URL for the local Ollama server.")
+    ollama_model: str = Field(default="qwen2.5:14b", description="Default Ollama model.")
     logs2logfire: bool = Field(default=False, description="Post all logs to Logfire. If false, some logs are written to a local log file.")
     logfire_token: str | None = None
 

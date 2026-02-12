@@ -14,6 +14,7 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 
+from assays.config import config
 from assays.logger import logger
 
 if TYPE_CHECKING:
@@ -444,14 +445,14 @@ class BradleyTerryEvaluator:
         Configure the evaluator.
 
         Args:
-            model: The language model or model string to use for evaluation. Defaults to qwen2.5:14b on Ollama.
+            model: The language model or model string to use for evaluation.
             criterion: The evaluation criterion for pairwise comparison.
             max_standard_deviation: Convergence threshold for adaptive strategy.
         """
         if model is None:
             self.model = OpenAIChatModel(
-                model_name="qwen2.5:14b",
-                provider=OpenAIProvider(base_url="http://localhost:11434/v1"),  # Local Ollama server
+                model_name=config.ollama_model,
+                provider=OpenAIProvider(base_url=f"{config.ollama_base_url}/v1"),
             )
         else:
             self.model = model

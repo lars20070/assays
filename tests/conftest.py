@@ -6,6 +6,9 @@ from vcr.request import Request
 
 from assays.config import config
 
+OLLAMA_BASE_URL = "http://localhost:11434"
+OLLAMA_MODEL = "qwen2.5:14b"
+
 
 @pytest.fixture(autouse=True)
 def config_for_testing(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:

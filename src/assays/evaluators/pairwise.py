@@ -9,6 +9,7 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 
+from assays.config import config
 from assays.logger import logger
 
 if TYPE_CHECKING:
@@ -38,8 +39,8 @@ class PairwiseEvaluator:
         """
         if model is None:
             self.model = OpenAIChatModel(
-                model_name="qwen3:8b",
-                provider=OpenAIProvider(base_url="http://localhost:11434/v1"),  # Local Ollama server
+                model_name=config.ollama_model,
+                provider=OpenAIProvider(base_url=f"{config.ollama_base_url}/v1"),
             )
         else:
             self.model = model
