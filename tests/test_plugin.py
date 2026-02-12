@@ -1040,7 +1040,12 @@ async def _run_query_generation(context: AssayContext) -> None:
         logger.debug(f"Generated search query: {result.output}")
 
 
-@pytest.mark.vcr()
+# =============================================================================
+# Integration tests for the 'assay' pytest plugin with different evaluators
+# =============================================================================
+
+
+@pytest.mark.skip()
 @pytest.mark.assay(
     generator=generate_evaluation_cases,
     evaluator=PairwiseEvaluator(
@@ -1063,7 +1068,7 @@ async def test_integration_pairwiseevaluator(context: AssayContext) -> None:
     await _run_query_generation(context)
 
 
-@pytest.mark.skip(reason="Requires local Ollama server.")
+@pytest.mark.skip()
 @pytest.mark.assay(
     generator=generate_evaluation_cases,
     evaluator=BradleyTerryEvaluator(

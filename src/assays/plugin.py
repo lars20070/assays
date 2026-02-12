@@ -30,6 +30,11 @@ AGENT_RESPONSES_KEY = pytest.StashKey[list[AgentRunResult[Any]]]()
 _current_item_var: contextvars.ContextVar[Item | None] = contextvars.ContextVar("_current_item", default=None)
 
 
+# =============================================================================
+# Helper functions for assay plugin
+# =============================================================================
+
+
 def _path(item: Item) -> Path:
     """
     Compute assay file path: <test_dir>/assays/<module>/<test>.json.
