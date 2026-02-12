@@ -39,7 +39,6 @@ reviews:
     - "!.claude/plans/**"
     - "!.cursor/plans/**"
     - "!**/assays/**"
-    - "!**/cassettes/**"
   path_instructions:
     - path: "**/*.py"
       instructions: |
