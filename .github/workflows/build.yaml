@@ -69,10 +69,14 @@ jobs:
       - name: Type check the package
         run: uv run pyright .
       - name: Run unit tests
-        # -v                verbose
-        # -p no:warnings    ignore warnings
-        # -p no:assays      avoid early import of assays package. Cause issues with coverage collection. See [project.entry-points.pytest11]
-        run: uv run pytest -v -p no:warnings -p no:assays --cov=assays --cov-report=xml
+        # Use `coverage run -m pytest` instead of `pytest --cov` so that coverage tracking
+        # starts BEFORE pytest loads plugins. The assays package is auto-loaded via
+        # [project.entry-points.pytest11], which imports most of the codebase at startup.
+        # With `pytest --cov`, those early imports are invisible to coverage, deflating the report.
+        run: |
+          uv run coverage erase
+          uv run coverage run -m pytest -v -p no:warnings
+          uv run coverage xml
       - name: Upload logs
         uses: actions/upload-artifact@v4
         if: always()

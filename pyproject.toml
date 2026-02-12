@@ -106,7 +106,6 @@ markers = [
 [tool.coverage.run]
 branch = true
 source = ["assays"]
-parallel = true
 disable_warnings = ["module-not-measured"]
 omit = [
   "tests/*",
