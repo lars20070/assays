@@ -48,11 +48,19 @@ New async test that actually calls `Agent.run()` while the monkeypatch is active
 - Original `Agent.run` is called (no infinite recursion)
 - Return value is passed through
 
-### 5. Simplify `test_pytest_runtest_call_initializes_stash`
+### 5. Add test: `_instrumented_agent_run` when `_current_item_var` is None
+
+When `_current_item_var` is unset (e.g., `Agent.run()` called outside a test body), the instrumented function should call the original and return the result without appending to any stash. Cover this no-op passthrough path.
+
+### 6. Add test: `Agent.run` is restored after the hook
+
+`pytest_runtest_call` monkeypatches `Agent.run` before yield and restores it in `finally`. Verify that after driving the generator to completion, `Agent.run` is the original unpatched method. Catches monkeypatch leaks.
+
+### 7. Simplify `test_pytest_runtest_call_initializes_stash`
 
 Replace fragile index-based assertion (`list(stash.values())[0]`) with direct key assertion (`AGENT_RESPONSES_KEY in stash`).
 
-### 6. Clean up imports in test_plugin.py
+### 8. Clean up imports in test_plugin.py
 
 After splitting, remove unused imports: `OpenAIChatModel`, `OpenAIProvider`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `config`.
 
