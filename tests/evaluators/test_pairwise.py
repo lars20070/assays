@@ -17,7 +17,8 @@ from pytest import Function
 
 import assays.plugin
 from assays.evaluators.pairwise import EVALUATION_INSTRUCTIONS, PairwiseEvaluator
-from assays.plugin import AGENT_RESPONSES_KEY, BASELINE_DATASET_KEY, AssayContext, Readout
+from assays.models import AssayContext, Readout
+from assays.plugin import AGENT_RESPONSES_KEY, BASELINE_DATASET_KEY
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture

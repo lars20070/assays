@@ -28,7 +28,8 @@ from assays.evaluators.bradleyterry import (
     round_robin_strategy,
 )
 from assays.logger import logger
-from assays.plugin import BASELINE_DATASET_KEY, AssayContext, Readout
+from assays.models import AssayContext, Readout
+from assays.plugin import BASELINE_DATASET_KEY
 
 if TYPE_CHECKING:
     from collections.abc import Callable

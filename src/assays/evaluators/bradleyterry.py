@@ -20,7 +20,7 @@ from assays.logger import logger
 if TYPE_CHECKING:
     from pytest import Item
 
-    from assays.plugin import Readout
+    from assays.models import Readout
 
 
 EVALUATION_INSTRUCTIONS = """
@@ -481,7 +481,8 @@ class BradleyTerryEvaluator:
         Returns:
             Readout with passed status and details.
         """
-        from assays.plugin import AGENT_RESPONSES_KEY, BASELINE_DATASET_KEY, Readout  # noqa: PLC0415
+        from assays.models import Readout  # noqa: PLC0415
+        from assays.plugin import AGENT_RESPONSES_KEY, BASELINE_DATASET_KEY  # noqa: PLC0415
 
         logger.info("Running Bradley-Terry evaluation on captured agent responses")
 

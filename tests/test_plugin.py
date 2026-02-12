@@ -5,7 +5,6 @@ Unit tests for the pytest assay plugin.
 These tests cover:
 - Plugin hook functions (pytest_addoption, pytest_configure, etc.)
 - Helper functions (_path, _is_assay)
-- AssayContext model
 - Agent.run() interception mechanism
 - Evaluation strategies
 """
@@ -31,13 +30,12 @@ from pytest import Function, Item
 import assays.plugin
 from assays.config import config  # noqa: F401
 from assays.logger import logger
+from assays.models import AssayContext, Readout
 from assays.plugin import (
     ASSAY_MODES,
     BASELINE_DATASET_KEY,
-    AssayContext,
     BradleyTerryEvaluator,
     PairwiseEvaluator,
-    Readout,
     _current_item_var,
     _is_assay,
     _path,
@@ -92,84 +90,6 @@ def test_assay_modes_constant() -> None:
     """Test that ASSAY_MODES contains the expected values."""
     assert ASSAY_MODES == ("evaluate", "new_baseline")
     assert len(ASSAY_MODES) == 2
-
-
-# =============================================================================
-# AssayContext Model Tests
-# =============================================================================
-
-
-def test_assay_context_model() -> None:
-    """Test AssayContext model creation with valid data."""
-    dataset = Dataset[dict[str, str], type[None], Any](cases=[])
-    path = Path("/tmp/test.json")
-
-    context = AssayContext(
-        dataset=dataset,
-        path=path,
-        assay_mode="evaluate",
-    )
-
-    assert context.dataset == dataset
-    assert context.path == path
-    assert context.assay_mode == "evaluate"
-
-
-def test_assay_context_model_default_mode() -> None:
-    """Test AssayContext uses 'evaluate' as default assay_mode."""
-    dataset = Dataset[dict[str, str], type[None], Any](cases=[])
-    path = Path("/tmp/test.json")
-
-    # Create without specifying assay_mode
-    context = AssayContext(dataset=dataset, path=path)
-
-    assert context.assay_mode == "evaluate"
-
-
-def test_assay_context_model_new_baseline_mode() -> None:
-    """Test AssayContext with new_baseline mode."""
-    dataset = Dataset[dict[str, str], type[None], Any](cases=[])
-    path = Path("/tmp/test.json")
-
-    context = AssayContext(
-        dataset=dataset,
-        path=path,
-        assay_mode="new_baseline",
-    )
-
-    assert context.assay_mode == "new_baseline"
-
-
-def test_assay_context_with_cases() -> None:
-    """Test AssayContext with a dataset containing cases."""
-    cases: list[Case[dict[str, str], type[None], Any]] = [
-        Case(name="case_001", inputs={"topic": "test topic 1", "query": "test query 1"}),
-        Case(name="case_002", inputs={"topic": "test topic 2", "query": "test query 2"}),
-    ]
-    dataset = Dataset[dict[str, str], type[None], Any](cases=cases)
-    path = Path("/tmp/test.json")
-
-    context = AssayContext(dataset=dataset, path=path)
-
-    # Verify case count and structure
-    assert len(context.dataset.cases) == 2
-
-    # Verify first case content
-    assert context.dataset.cases[0].name == "case_001"
-    assert context.dataset.cases[0].inputs["topic"] == "test topic 1"
-    assert context.dataset.cases[0].inputs["query"] == "test query 1"
-    assert "topic" in context.dataset.cases[0].inputs
-    assert "query" in context.dataset.cases[0].inputs
-
-    # Verify dataset is mutable (required for update inside unit tests)
-    context.dataset.cases.clear()
-    assert len(context.dataset.cases) == 0
-
-    # Verify we can extend with new cases
-    new_case = Case(name="case_003", inputs={"query": "new query"})
-    context.dataset.cases.append(new_case)
-    assert len(context.dataset.cases) == 1
-    assert context.dataset.cases[0].name == "case_003"
 
 
 # =============================================================================
@@ -874,60 +794,6 @@ def test_pytest_runtest_teardown_evaluation_exception(mocker: MockerFixture) -> 
 
     # Should log exception
     mock_logger.exception.assert_called_once()
-
-
-# =============================================================================
-# Readout Tests
-# =============================================================================
-
-
-def test_readout_model_defaults() -> None:
-    """Test Readout model initializes with default values."""
-    readout = Readout()
-
-    assert readout.passed is True
-    assert readout.details is None
-
-
-def test_readout_model_custom() -> None:
-    """Test Readout model initializes with custom values."""
-    readout = Readout(passed=False, details={"error": "test error"})
-
-    assert readout.passed is False
-    assert readout.details == {"error": "test error"}
-
-
-def test_readout_to_file(tmp_path: Path) -> None:
-    """Test Readout.to_file() serializes to JSON file."""
-    readout = Readout(passed=True, details={"key": "value", "count": 42})
-    file_path = tmp_path / "readout.json"
-
-    readout.to_file(file_path)
-
-    assert file_path.exists()
-
-    # Verify content
-    with file_path.open() as f:
-        data = json.load(f)
-
-    assert data["passed"] is True
-    assert data["details"] == {"key": "value", "count": 42}
-
-
-def test_readout_to_file_with_none_details(tmp_path: Path) -> None:
-    """Test Readout.to_file() handles None details correctly."""
-    readout = Readout(passed=False, details=None)
-    file_path = tmp_path / "readout.json"
-
-    readout.to_file(file_path)
-
-    assert file_path.exists()
-
-    with file_path.open() as f:
-        data = json.load(f)
-
-    assert data["passed"] is False
-    assert data["details"] is None
 
 
 # =============================================================================
