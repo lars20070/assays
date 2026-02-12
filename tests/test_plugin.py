@@ -23,7 +23,6 @@ from pydantic_ai import Agent
 from pydantic_ai.agent import AgentRunResult
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.settings import ModelSettings
 from pydantic_evals import Case, Dataset
 from pytest import Function, Item
 
@@ -47,6 +46,7 @@ from assays.plugin import (
 )
 
 if TYPE_CHECKING:
+    from pydantic_ai.settings import ModelSettings
     from pytest_mock import MockerFixture
 
 
@@ -993,7 +993,7 @@ def generate_evaluation_cases() -> Dataset[dict[str, str], str, Any]:
 
 # Model for both (1) the search query generation and (2) the evaluation of the generated queries.
 model = OpenAIChatModel(
-    model_name="qwen3:14b",
+    model_name="qwen2.5:14b",
     provider=OpenAIProvider(base_url="http://localhost:11434/v1"),  # Local Ollama server
 )
 
@@ -1015,7 +1015,7 @@ Examples of curious, creative queries for the topic 'molecular gastronomy' (GOOD
 Now generate one creative search query for: <TOPIC>{topic}</TOPIC>"""
 
 
-async def _run_query_generation(context: AssayContext) -> None:
+async def _run_query_generation(context: AssayContext, model_settings: ModelSettings) -> None:
     """Run query generation for all cases in the dataset."""
     query_agent = Agent(
         model=model,
@@ -1034,7 +1034,7 @@ async def _run_query_generation(context: AssayContext) -> None:
         async with query_agent:
             result = await query_agent.run(
                 user_prompt=prompt,
-                model_settings=ModelSettings(temperature=0.0, timeout=300),
+                model_settings=model_settings,
             )
 
         logger.debug(f"Generated search query: {result.output}")
@@ -1045,7 +1045,7 @@ async def _run_query_generation(context: AssayContext) -> None:
 # =============================================================================
 
 
-@pytest.mark.skip()
+@pytest.mark.ollama
 @pytest.mark.assay(
     generator=generate_evaluation_cases,
     evaluator=PairwiseEvaluator(
@@ -1054,7 +1054,7 @@ async def _run_query_generation(context: AssayContext) -> None:
     ),
 )
 @pytest.mark.asyncio
-async def test_integration_pairwiseevaluator(context: AssayContext) -> None:
+async def test_integration_pairwiseevaluator(context: AssayContext, model_settings: ModelSettings) -> None:
     """
     Integration test for the 'assay' pytest plugin with PairwiseEvaluator evaluator.
 
@@ -1063,12 +1063,13 @@ async def test_integration_pairwiseevaluator(context: AssayContext) -> None:
 
     Args:
         context: The assay context containing the evaluation dataset context.dataset and other information.
+        model_settings: Deterministic model settings for reproducible tests.
     """
     logger.info("Integration test for assay pytest plugin with PairwiseEvaluator.")
-    await _run_query_generation(context)
+    await _run_query_generation(context, model_settings)
 
 
-@pytest.mark.skip()
+@pytest.mark.ollama
 @pytest.mark.assay(
     generator=generate_evaluation_cases,
     evaluator=BradleyTerryEvaluator(
@@ -1078,7 +1079,7 @@ async def test_integration_pairwiseevaluator(context: AssayContext) -> None:
     ),
 )
 @pytest.mark.asyncio
-async def test_integration_bradleyterryevaluator(context: AssayContext) -> None:
+async def test_integration_bradleyterryevaluator(context: AssayContext, model_settings: ModelSettings) -> None:
     """
     Integration test for the 'assay' pytest plugin with BradleyTerryEvaluator evaluator.
 
@@ -1087,6 +1088,7 @@ async def test_integration_bradleyterryevaluator(context: AssayContext) -> None:
 
     Args:
         context: The assay context containing the evaluation dataset context.dataset and other information.
+        model_settings: Deterministic model settings for reproducible tests.
     """
     logger.info("Integration test for assay pytest plugin with BradleyTerryEvaluator.")
-    await _run_query_generation(context)
+    await _run_query_generation(context, model_settings)
