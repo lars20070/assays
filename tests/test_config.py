@@ -9,9 +9,7 @@ load_dotenv()
 
 
 def test_config() -> None:
-    """
-    Test the Config class
-    """
+    """Test the Config class."""
     logger.info("Testing the Config() class")
 
     # See values in config_for_testing() fixture

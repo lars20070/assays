@@ -26,9 +26,7 @@ OLLAMA_MODEL = "qwen2.5:14b"
 
 
 def _ollama_is_running() -> bool:
-    """
-    Check whether the local Ollama server is reachable.
-    """
+    """Check whether the local Ollama server is reachable."""
     try:
         response = httpx.get(OLLAMA_BASE_URL, timeout=5)
         return response.status_code == 200
@@ -42,9 +40,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
 @pytest.fixture(autouse=True)
 def skip_ollama_tests(request: pytest.FixtureRequest) -> None:
-    """
-    Skip tests marked with 'ollama' when running in CI or when Ollama is not reachable.
-    """
+    """Skip tests marked with 'ollama' when running in CI or when Ollama is not reachable."""
     if request.node.get_closest_marker("ollama") and not _ollama_is_running():
         pytest.skip(f"Ollama server is not running at {OLLAMA_BASE_URL}. Please start it with `ollama serve` before running this test.")
 

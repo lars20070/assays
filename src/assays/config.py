@@ -8,9 +8,7 @@ load_dotenv()
 
 
 class Config(BaseSettings):
-    """
-    Configuration settings for the application.
-    """
+    """Configuration settings for the application."""
 
     logs2logfire: bool = Field(default=False, description="Post all logs to Logfire. If false, some logs are written to a local log file.")
     logfire_token: str | None = None

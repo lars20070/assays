@@ -9,9 +9,7 @@ from assays.config import config
 
 @pytest.fixture(autouse=True)
 def config_for_testing(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
-    """
-    Override the config for unit testing.
-    """
+    """Override the config for unit testing."""
     monkeypatch.setattr(config, "logs2logfire", False)
 
     yield
@@ -22,8 +20,8 @@ def vcr_config() -> dict[str, object]:
     """
     Configure VCR recordings for tests with @pytest.mark.vcr() decorator.
 
-    When on bare metal, our host is `localhost`. When in a dev container, our host is `host.docker.internal`.
-    `uri_spoofing` ensures that VCR cassettes are read or recorded as if the host was `localhost`.
+    When on bare metal, our host is localhost. When in a dev container, our host is host.docker.internal.
+    uri_spoofing ensures that VCR cassettes are read or recorded as if the host was localhost.
     See ./tests/cassettes/*/*.yaml.
 
     Returns:

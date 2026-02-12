@@ -1096,9 +1096,7 @@ def test_current_item_var_set_and_get(mocker: MockerFixture) -> None:
 
 
 def generate_evaluation_cases() -> Dataset[dict[str, str], str, Any]:
-    """
-    Generate a list of Cases containing topics as input.
-    """
+    """Generate a list of Cases containing topics as input."""
     logger.info("Creating new assay dataset.")
 
     topics = [
@@ -1193,7 +1191,7 @@ async def test_integration_pairwiseevaluator(context: AssayContext) -> None:
     PairwiseEvaluator then evaluates the creativity of the generated queries.
 
     Args:
-        context: The assay context containing the evaluation dataset `context.dataset`and other information.
+        context: The assay context containing the evaluation dataset context.dataset and other information.
     """
     logger.info("Integration test for assay pytest plugin with PairwiseEvaluator.")
     await _run_query_generation(context)
@@ -1217,7 +1215,7 @@ async def test_integration_bradleyterryevaluator(context: AssayContext) -> None:
     BradleyTerryEvaluator then evaluates the creativity of the generated queries.
 
     Args:
-        context: The assay context containing the evaluation dataset `context.dataset`and other information.
+        context: The assay context containing the evaluation dataset context.dataset and other information.
     """
     logger.info("Integration test for assay pytest plugin with BradleyTerryEvaluator.")
     await _run_query_generation(context)

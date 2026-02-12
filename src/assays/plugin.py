@@ -38,7 +38,8 @@ class Readout(BaseModel):
     details: dict[str, Any] | None = None
 
     def to_file(self, path: Path) -> None:
-        """Serialize the readout to a JSON file.
+        """
+        Serialize the readout to a JSON file.
 
         Args:
             path: The file path to write to.
@@ -48,7 +49,8 @@ class Readout(BaseModel):
 
 
 class Evaluator(Protocol):
-    """Protocol for evaluation strategy callables.
+    """
+    Protocol for evaluation strategy callables.
 
     The Protocol defines ONLY what the plugin needs to call.
     Evaluator implementations configure themselves via __init__.
@@ -249,17 +251,17 @@ def pytest_runtest_setup(item: Item) -> None:
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item: Item) -> Generator[None, None, None]:
     """
-    Intercepts `Agent.run()` calls during test execution to record model outputs.
+    Intercepts Agent.run() calls during test execution to record model outputs.
 
     Mechanism:
-    1. Setup: Temporarily replaces `Agent.run` with an instrumented wrapper.
-    2. Capture: When called, the wrapper retrieves the current test `item` via a `ContextVar`
-       and saves the result to `item.stash[AGENT_RESPONSES_KEY]`.
-    3. Teardown: Restores the original `Agent.run` method.
+    1. Setup: Temporarily replaces Agent.run with an instrumented wrapper.
+    2. Capture: When called, the wrapper retrieves the current test item via a ContextVar
+       and saves the result to item.stash[AGENT_RESPONSES_KEY].
+    3. Teardown: Restores the original Agent.run method.
 
     Why ContextVar?
-    The `Agent.run` method signature cannot be modified to accept the test `item`.
-    `ContextVar` acts as a thread-safe tunnel, allowing the wrapper to access the
+    The Agent.run method signature cannot be modified to accept the test item.
+    ContextVar acts as a thread-safe tunnel, allowing the wrapper to access the
     current test context implicitly without threading arguments through the call stack.
     """
 
@@ -295,9 +297,7 @@ def pytest_runtest_call(item: Item) -> Generator[None, None, None]:
         *args: Any,  # noqa: ANN401
         **kwargs: Any,  # noqa: ANN401
     ) -> AgentRunResult[Any]:
-        """
-        Wrapped Agent.run() that captures responses to the current test item's stash.
-        """
+        """Wrapped Agent.run() that captures responses to the current test item's stash."""
         # A. Execute actual logic (awaiting the captured variable avoids infinite recursion)
         result = await original_agent_run(self, *args, **kwargs)
 

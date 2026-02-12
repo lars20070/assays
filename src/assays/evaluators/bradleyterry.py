@@ -428,7 +428,8 @@ class EvalTournament(BaseModel):
 
 
 class BradleyTerryEvaluator:
-    """Evaluates test outputs using Bradley-Terry tournament scoring.
+    """
+    Evaluates test outputs using Bradley-Terry tournament scoring.
 
     Configuration is set at instantiation; __call__ runs the evaluation.
     """
@@ -439,7 +440,8 @@ class BradleyTerryEvaluator:
         criterion: str = "Which of the two agent responses is better?",
         max_standard_deviation: float = 2.0,
     ) -> None:
-        """Configure the evaluator.
+        """
+        Configure the evaluator.
 
         Args:
             model: The language model or model string to use for evaluation. Defaults to qwen2.5:14b on Ollama.
@@ -469,7 +471,8 @@ class BradleyTerryEvaluator:
         self.max_standard_deviation = max_standard_deviation
 
     async def __call__(self, item: Item) -> Readout:
-        """Run Bradley-Terry tournament on baseline and novel responses.
+        """
+        Run Bradley-Terry tournament on baseline and novel responses.
 
         Args:
             item: The pytest test item with assay context and captured responses.

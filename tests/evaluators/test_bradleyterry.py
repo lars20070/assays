@@ -386,9 +386,7 @@ class TestBradleyTerryEvaluator:
 @pytest.mark.ollama
 @pytest.mark.asyncio
 async def test_evalgame_integration(ice_cream_players: list[EvalPlayer], evaluation_agent: Agent[None, Any], model_settings: ModelSettings) -> None:
-    """
-    Test the EvalGame class.
-    """
+    """Test the EvalGame class."""
     logger.info("Testing EvalGame() class")
 
     game = EvalGame(criterion="Which of the two ice cream flavours A or B is more creative?")
@@ -412,9 +410,7 @@ async def test_evalgame_integration(ice_cream_players: list[EvalPlayer], evaluat
 async def test_evaltournament_integration(
     ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame, evaluation_agent: Agent[None, Any], model_settings: ModelSettings
 ) -> None:
-    """
-    Test the EvalTournament class.
-    """
+    """Test the EvalTournament class."""
     logger.info("Testing EvalTournament() class")
 
     tournament = EvalTournament(players=ice_cream_players, game=ice_cream_game)
@@ -466,9 +462,7 @@ async def test_random_sampling_strategy(
     model_settings: ModelSettings,
     fraction_of_games: float | None,
 ) -> None:
-    """
-    Test the random sampling tournament strategy.
-    """
+    """Test the random sampling tournament strategy."""
     logger.info("Testing random_sampling_strategy()")
 
     players_with_scores = await random_sampling_strategy(
@@ -492,9 +486,7 @@ async def test_random_sampling_strategy(
 async def test_round_robin_strategy(
     ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame, evaluation_agent: Agent[None, Any], model_settings: ModelSettings
 ) -> None:
-    """
-    Test the round robin tournament strategy.
-    """
+    """Test the round robin tournament strategy."""
     logger.info("Testing round_robin_strategy()")
 
     players_with_scores = await round_robin_strategy(
@@ -518,9 +510,7 @@ async def test_round_robin_strategy(
 async def test_adaptive_uncertainty_strategy(
     ice_cream_players: list[EvalPlayer], ice_cream_game: EvalGame, evaluation_agent: Agent[None, Any], model_settings: ModelSettings
 ) -> None:
-    """
-    Test the adaptive uncertainty tournament strategy.
-    """
+    """Test the adaptive uncertainty tournament strategy."""
     logger.info("Testing adaptive_uncertainty_strategy()")
 
     players_with_scores = await adaptive_uncertainty_strategy(

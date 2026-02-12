@@ -18,7 +18,8 @@ if TYPE_CHECKING:
 
 
 class PairwiseEvaluator:
-    """Evaluates test outputs using pairwise comparison.
+    """
+    Evaluates test outputs using pairwise comparison.
 
     Configuration is set at instantiation; __call__ runs the evaluation.
     """
@@ -28,7 +29,8 @@ class PairwiseEvaluator:
         model: str | OpenAIChatModel | None = None,
         criterion: str = "Which of the two responses is better?",
     ) -> None:
-        """Configure the evaluator.
+        """
+        Configure the evaluator.
 
         Args:
             model: The language model or model string to use for evaluation. Defaults to qwen3:8b on Ollama.
@@ -111,7 +113,8 @@ class PairwiseEvaluator:
         self.criterion = criterion
 
     async def __call__(self, item: Item) -> Readout:
-        """Run pairwise comparison of baseline and novel responses.
+        """
+        Run pairwise comparison of baseline and novel responses.
 
         Args:
             item: The pytest test item with assay context and captured responses.
