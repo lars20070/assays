@@ -3,40 +3,31 @@
 Unit tests for the pytest assay plugin.
 
 These tests cover:
-- Plugin hook functions (pytest_addoption, pytest_configure, etc.)
 - Helper functions (_path, _is_assay)
-- Agent.run() interception mechanism
-- Evaluation strategies
+- Plugin hook functions (pytest_addoption, pytest_configure, pytest_runtest_setup, etc.)
+- Agent.run() interception mechanism (monkeypatch, capture, restoration)
+- Evaluation and baseline serialization in pytest_runtest_teardown
 """
 
 from __future__ import annotations as _annotations
 
 import contextlib
-import importlib
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock
 
 import pytest
-from _ollama import OLLAMA_BASE_URL, OLLAMA_MODEL
 from pydantic_ai import Agent
 from pydantic_ai.agent import AgentRunResult
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_evals import Case, Dataset
 from pytest import Function, Item
 
 import assays.plugin
-from assays.config import config  # noqa: F401
-from assays.logger import logger
 from assays.models import AssayContext, Readout
 from assays.plugin import (
-    ASSAY_MODES,
+    AGENT_RESPONSES_KEY,
     BASELINE_DATASET_KEY,
-    BradleyTerryEvaluator,
-    PairwiseEvaluator,
-    _current_item_var,
     _is_assay,
     _path,
     pytest_addoption,
@@ -47,7 +38,6 @@ from assays.plugin import (
 )
 
 if TYPE_CHECKING:
-    from pydantic_ai.settings import ModelSettings
     from pytest_mock import MockerFixture
 
 
@@ -60,41 +50,7 @@ def _drive_hookwrapper(item: Item, nextitem: Item | None = None) -> None:
 
 
 # =============================================================================
-# Module Import Tests
-# =============================================================================
-
-
-def test_module_imports() -> None:
-    """
-    Test that the plugin module imports correctly and exports expected symbols.
-
-    This test forces a module reload to ensure coverage tracks import-time code.
-    """
-    # Reload the module to capture import-time coverage
-    module = importlib.reload(assays.plugin)
-
-    # Verify module-level exports
-    assert module.ASSAY_MODES == ("evaluate", "new_baseline")
-    assert callable(module.pytest_addoption)
-    assert callable(module.pytest_configure)
-    assert callable(module.pytest_runtest_setup)
-    assert callable(module.pytest_runtest_call)
-    assert callable(module.pytest_runtest_teardown)
-    assert hasattr(module, "BradleyTerryEvaluator")
-    assert hasattr(module, "PairwiseEvaluator")
-    assert hasattr(module, "Readout")
-    assert callable(module._path)
-    assert callable(module._is_assay)
-
-
-def test_assay_modes_constant() -> None:
-    """Test that ASSAY_MODES contains the expected values."""
-    assert ASSAY_MODES == ("evaluate", "new_baseline")
-    assert len(ASSAY_MODES) == 2
-
-
-# =============================================================================
-# Helper Function Tests
+# Helper Function Tests (_path, _is_assay)
 # =============================================================================
 
 
@@ -185,7 +141,7 @@ def test_pytest_addoption(mocker: MockerFixture) -> None:
         "--assay-mode",
         action="store",
         default="evaluate",
-        choices=ASSAY_MODES,
+        choices=("evaluate", "new_baseline"),
         help='Assay mode. Defaults to "evaluate".',
     )
 
@@ -255,8 +211,8 @@ def test_pytest_runtest_setup_with_existing_dataset(mocker: MockerFixture, tmp_p
     pytest_runtest_setup(mock_item)
 
     # Verify baseline dataset was stashed for evaluators
-    assert assays.plugin.BASELINE_DATASET_KEY in mock_item.stash
-    baseline = mock_item.stash[assays.plugin.BASELINE_DATASET_KEY]
+    assert BASELINE_DATASET_KEY in mock_item.stash
+    baseline = mock_item.stash[BASELINE_DATASET_KEY]
     assert len(baseline.cases) == 2
     assert baseline.cases[0].inputs["query"] == "existing query"
 
@@ -316,8 +272,8 @@ def test_pytest_runtest_setup_with_generator(mocker: MockerFixture, tmp_path: Pa
     pytest_runtest_setup(mock_item)
 
     # Verify baseline dataset was stashed
-    assert assays.plugin.BASELINE_DATASET_KEY in mock_item.stash
-    assert len(mock_item.stash[assays.plugin.BASELINE_DATASET_KEY].cases) == 3
+    assert BASELINE_DATASET_KEY in mock_item.stash
+    assert len(mock_item.stash[BASELINE_DATASET_KEY].cases) == 3
 
     # Verify generator was called exactly once
     mock_generator.assert_called_once()
@@ -386,8 +342,8 @@ def test_pytest_runtest_setup_empty_dataset(mocker: MockerFixture, tmp_path: Pat
 
     pytest_runtest_setup(mock_item)
 
-    assert assays.plugin.BASELINE_DATASET_KEY in mock_item.stash
-    assert len(mock_item.stash[assays.plugin.BASELINE_DATASET_KEY].cases) == 0
+    assert BASELINE_DATASET_KEY in mock_item.stash
+    assert len(mock_item.stash[BASELINE_DATASET_KEY].cases) == 0
 
     assay_ctx = mock_item.funcargs["context"]
     assert len(assay_ctx.dataset.cases) == 0
@@ -419,7 +375,7 @@ def test_pytest_runtest_setup_baseline_stash_is_copy(mocker: MockerFixture, tmp_
     pytest_runtest_setup(mock_item)
 
     assay_ctx = mock_item.funcargs["context"]
-    baseline = mock_item.stash[assays.plugin.BASELINE_DATASET_KEY]
+    baseline = mock_item.stash[BASELINE_DATASET_KEY]
 
     # Simulate test mutation (like test_curiosity.py)
     assay_ctx.dataset.cases.clear()
@@ -460,7 +416,7 @@ def test_pytest_runtest_call_without_assay_marker(mocker: MockerFixture) -> None
 
 
 def test_pytest_runtest_call_initializes_stash(mocker: MockerFixture) -> None:
-    """Test pytest_runtest_call initializes the response stash."""
+    """Test pytest_runtest_call initializes the response stash with AGENT_RESPONSES_KEY."""
     mock_item = mocker.MagicMock(spec=Function)
     mock_item.stash = {}
     mock_marker = mocker.MagicMock()
@@ -471,10 +427,9 @@ def test_pytest_runtest_call_initializes_stash(mocker: MockerFixture) -> None:
     gen = pytest_runtest_call(mock_item)
     next(gen)  # Run until yield
 
-    # Verify stash was initialized - check that at least one key exists with empty list
-    assert len(mock_item.stash) == 1
-    stash_values = list(mock_item.stash.values())
-    assert stash_values[0] == []
+    # Verify stash was initialized with the correct key
+    assert AGENT_RESPONSES_KEY in mock_item.stash
+    assert mock_item.stash[AGENT_RESPONSES_KEY] == []
 
     # Clean up
     with contextlib.suppress(StopIteration):
@@ -503,8 +458,123 @@ def test_pytest_runtest_call_sets_context_var(mocker: MockerFixture) -> None:
     assert assays.plugin._current_item_var.get() is None
 
 
+def test_pytest_runtest_call_restores_agent_run(mocker: MockerFixture) -> None:
+    """Test that Agent.run is restored to its original method after the hook completes."""
+    mock_item = mocker.MagicMock(spec=Function)
+    mock_item.stash = {}
+    mock_marker = mocker.MagicMock()
+    mock_item.get_closest_marker.return_value = mock_marker
+
+    mocker.patch("assays.plugin.logger")
+
+    original_run = Agent.run
+
+    gen = pytest_runtest_call(mock_item)
+    next(gen)  # Run until yield; Agent.run is now monkeypatched
+
+    # During the yield, Agent.run should be the instrumented version
+    assert Agent.run is not original_run
+
+    # Clean up
+    with contextlib.suppress(StopIteration):
+        next(gen)
+
+    # After the hook, Agent.run must be restored
+    assert Agent.run is original_run
+
+
+@pytest.mark.asyncio
+async def test_instrumented_agent_run_captures_response(mocker: MockerFixture) -> None:
+    """
+    Test that calling Agent.run() while the monkeypatch is active captures the response.
+
+    Verifies:
+    - The original Agent.run is called (no infinite recursion)
+    - The result is appended to item.stash[AGENT_RESPONSES_KEY]
+    - The return value is passed through to the caller
+    """
+    mock_item = mocker.MagicMock(spec=Function)
+    mock_item.stash = {}
+    mock_marker = mocker.MagicMock()
+    mock_item.get_closest_marker.return_value = mock_marker
+
+    mocker.patch("assays.plugin.logger")
+
+    # Mock the original Agent.run to return a controlled result
+    mock_result = mocker.MagicMock(spec=AgentRunResult)
+    mock_result.output = "captured output"
+    mock_original_run = AsyncMock(return_value=mock_result)
+    mocker.patch.object(Agent, "run", mock_original_run)
+
+    gen = pytest_runtest_call(mock_item)
+    next(gen)  # Activates the monkeypatch
+
+    # Call the instrumented Agent.run
+    agent = mocker.MagicMock(spec=Agent)
+    result = await Agent.run(agent, user_prompt="test prompt")
+
+    # Return value should be passed through
+    assert result is mock_result
+
+    # Response should be captured in the stash
+    assert len(mock_item.stash[AGENT_RESPONSES_KEY]) == 1
+    assert mock_item.stash[AGENT_RESPONSES_KEY][0] is mock_result
+
+    # Original Agent.run should have been called
+    mock_original_run.assert_called_once()
+
+    # Clean up
+    with contextlib.suppress(StopIteration):
+        next(gen)
+
+
+@pytest.mark.asyncio
+async def test_instrumented_agent_run_no_item_in_context(mocker: MockerFixture) -> None:
+    """
+    Test that _instrumented_agent_run works when _current_item_var is None.
+
+    When Agent.run() is called outside a test body (context var unset), the instrumented
+    function should call the original and return the result without appending to any stash.
+    """
+    mock_item = mocker.MagicMock(spec=Function)
+    mock_item.stash = {}
+    mock_marker = mocker.MagicMock()
+    mock_item.get_closest_marker.return_value = mock_marker
+
+    mocker.patch("assays.plugin.logger")
+
+    # Mock the original Agent.run
+    mock_result = mocker.MagicMock(spec=AgentRunResult)
+    mock_result.output = "passthrough output"
+    mock_original_run = AsyncMock(return_value=mock_result)
+    mocker.patch.object(Agent, "run", mock_original_run)
+
+    gen = pytest_runtest_call(mock_item)
+    next(gen)  # Activates the monkeypatch; _current_item_var is set to mock_item
+
+    # Manually clear the context var to simulate an external call
+    token = assays.plugin._current_item_var.set(None)
+
+    try:
+        agent = mocker.MagicMock(spec=Agent)
+        result = await Agent.run(agent, user_prompt="external call")
+
+        # Return value should still pass through
+        assert result is mock_result
+
+        # No response should be captured (context var was None)
+        assert mock_item.stash[AGENT_RESPONSES_KEY] == []
+    finally:
+        # Restore the context var so the generator cleanup works correctly
+        assays.plugin._current_item_var.reset(token)
+
+    # Clean up
+    with contextlib.suppress(StopIteration):
+        next(gen)
+
+
 # =============================================================================
-# pytest_runtest_teardown Tests
+# pytest_runtest_teardown Tests (_serialize_baseline path)
 # =============================================================================
 
 
@@ -517,26 +587,15 @@ def test_pytest_runtest_teardown_non_assay_item(mocker: MockerFixture) -> None:
     _drive_hookwrapper(mock_item, None)
 
 
-def test_pytest_runtest_teardown_evaluate_mode(mocker: MockerFixture, tmp_path: Path) -> None:
-    """Test pytest_runtest_teardown does not serialize in evaluate mode."""
-    dataset_path = tmp_path / "assays" / "test.json"
-    dataset = Dataset[dict[str, str], type[None], Any](cases=[])
-
+def test_pytest_runtest_teardown_no_assay_context(mocker: MockerFixture) -> None:
+    """Test pytest_runtest_teardown handles missing assay context gracefully."""
     mock_item = mocker.MagicMock(spec=Function)
-    mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=dataset_path, assay_mode="evaluate")}
-    mock_marker = mocker.MagicMock()
-    mock_marker.kwargs = {"evaluator": AsyncMock(return_value=Readout(passed=True))}
-    mock_item.get_closest_marker.return_value = mock_marker
+    mock_item.funcargs = {}  # No assay context
 
     mocker.patch("assays.plugin._is_assay", return_value=True)
-    mocker.patch("assays.plugin.logger")
-    mocker.patch("assays.plugin.asyncio.run")  # Mock to prevent actual evaluation
 
-    # Drive the hookwrapper generator
+    # Drive the hookwrapper generator - should not raise
     _drive_hookwrapper(mock_item, None)
-
-    # File should not be created in evaluate mode (evaluation doesn't serialize dataset)
-    assert not dataset_path.exists()
 
 
 def test_pytest_runtest_teardown_new_baseline_mode(mocker: MockerFixture, tmp_path: Path) -> None:
@@ -559,7 +618,7 @@ def test_pytest_runtest_teardown_new_baseline_mode(mocker: MockerFixture, tmp_pa
     mock_item = mocker.MagicMock(spec=Function)
     mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=dataset_path, assay_mode="new_baseline")}
     mock_item.stash = {
-        assays.plugin.AGENT_RESPONSES_KEY: [mock_response_a, mock_response_b],
+        AGENT_RESPONSES_KEY: [mock_response_a, mock_response_b],
     }
 
     mocker.patch("assays.plugin._is_assay", return_value=True)
@@ -603,7 +662,7 @@ def test_pytest_runtest_teardown_new_baseline_response_count_mismatch(mocker: Mo
     mock_item = mocker.MagicMock(spec=Function)
     mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=dataset_path, assay_mode="new_baseline")}
     mock_item.stash = {
-        assays.plugin.AGENT_RESPONSES_KEY: [mock_response],
+        AGENT_RESPONSES_KEY: [mock_response],
     }
 
     mocker.patch("assays.plugin._is_assay", return_value=True)
@@ -633,7 +692,7 @@ def test_pytest_runtest_teardown_new_baseline_none_output(mocker: MockerFixture,
     mock_item = mocker.MagicMock(spec=Function)
     mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=dataset_path, assay_mode="new_baseline")}
     mock_item.stash = {
-        assays.plugin.AGENT_RESPONSES_KEY: [mock_response],
+        AGENT_RESPONSES_KEY: [mock_response],
     }
 
     mocker.patch("assays.plugin._is_assay", return_value=True)
@@ -671,15 +730,31 @@ def test_pytest_runtest_teardown_new_baseline_no_responses(mocker: MockerFixture
     mock_logger.error.assert_called_once()
 
 
-def test_pytest_runtest_teardown_no_assay_context(mocker: MockerFixture) -> None:
-    """Test pytest_runtest_teardown handles missing assay context gracefully."""
+# =============================================================================
+# pytest_runtest_teardown Tests (_run_evaluation path)
+# =============================================================================
+
+
+def test_pytest_runtest_teardown_evaluate_mode(mocker: MockerFixture, tmp_path: Path) -> None:
+    """Test pytest_runtest_teardown does not serialize dataset in evaluate mode."""
+    dataset_path = tmp_path / "assays" / "test.json"
+    dataset = Dataset[dict[str, str], type[None], Any](cases=[])
+
     mock_item = mocker.MagicMock(spec=Function)
-    mock_item.funcargs = {}  # No assay context
+    mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=dataset_path, assay_mode="evaluate")}
+    mock_marker = mocker.MagicMock()
+    mock_marker.kwargs = {"evaluator": AsyncMock(return_value=Readout(passed=True))}
+    mock_item.get_closest_marker.return_value = mock_marker
 
     mocker.patch("assays.plugin._is_assay", return_value=True)
+    mocker.patch("assays.plugin.logger")
+    mocker.patch("assays.plugin.asyncio.run")  # Mock to prevent actual evaluation
 
-    # Drive the hookwrapper generator - should not raise
+    # Drive the hookwrapper generator
     _drive_hookwrapper(mock_item, None)
+
+    # File should not be created in evaluate mode (evaluation doesn't serialize dataset)
+    assert not dataset_path.exists()
 
 
 def test_pytest_runtest_teardown_runs_evaluation(mocker: MockerFixture, tmp_path: Path) -> None:
@@ -728,7 +803,7 @@ def test_pytest_runtest_teardown_uses_default_evaluator(mocker: MockerFixture, t
     mock_item = mocker.MagicMock(spec=Function)
     mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=assay_path, assay_mode="evaluate")}
     mock_item.stash = {
-        assays.plugin.AGENT_RESPONSES_KEY: [],
+        AGENT_RESPONSES_KEY: [],
         BASELINE_DATASET_KEY: dataset,
     }
     mock_marker = mocker.MagicMock()
@@ -798,7 +873,7 @@ def test_pytest_runtest_teardown_evaluation_exception(mocker: MockerFixture) -> 
 
 
 # =============================================================================
-# Integration-style Tests (Realistic Workflows)
+# Workflow Tests (setup + teardown combined)
 # =============================================================================
 
 
@@ -853,7 +928,7 @@ def test_full_assay_workflow_with_topic_generation(mocker: MockerFixture, tmp_pa
         mock_response = mocker.MagicMock(spec=AgentRunResult)
         mock_response.output = f"search for: {topic}"
         mock_responses.append(mock_response)
-    mock_item.stash[assays.plugin.AGENT_RESPONSES_KEY] = mock_responses
+    mock_item.stash[AGENT_RESPONSES_KEY] = mock_responses
 
     # Run teardown (should merge responses and serialize in new_baseline mode)
     # Drive the hookwrapper generator
@@ -870,227 +945,3 @@ def test_full_assay_workflow_with_topic_generation(mocker: MockerFixture, tmp_pa
         assert reloaded.cases[idx].name == f"case_{idx:03d}"
         assert reloaded.cases[idx].inputs["topic"] == topic
         assert reloaded.cases[idx].expected_output == f"search for: {topic}"
-
-
-def test_response_capture_simulation(mocker: MockerFixture) -> None:
-    """
-    Test that the response capture mechanism correctly stores Agent outputs.
-
-    This simulates what happens during pytest_runtest_call when Agent.run() is called.
-    """
-    # Setup mock item with assay marker
-    mock_item = mocker.MagicMock(spec=Function)
-    mock_item.stash = {}
-    mock_marker = mocker.MagicMock()
-    mock_item.get_closest_marker.return_value = mock_marker
-
-    mocker.patch("assays.plugin.logger")
-
-    # Run the hook to initialize stash
-    gen = pytest_runtest_call(mock_item)
-    next(gen)  # Run until yield
-
-    # Verify stash was initialized with empty list
-    assert assays.plugin.AGENT_RESPONSES_KEY in mock_item.stash
-    responses = mock_item.stash[assays.plugin.AGENT_RESPONSES_KEY]
-    assert responses == []
-
-    # Verify context var was set
-    assert assays.plugin._current_item_var.get() == mock_item
-
-    # Simulate adding responses (normally done by wrapped Agent.run)
-    mock_response = mocker.MagicMock(spec=AgentRunResult)
-    mock_response.output = "test output"
-    responses.append(mock_response)
-
-    # Verify response was captured
-    assert len(mock_item.stash[assays.plugin.AGENT_RESPONSES_KEY]) == 1
-    assert mock_item.stash[assays.plugin.AGENT_RESPONSES_KEY][0].output == "test output"
-
-    # Clean up
-    with contextlib.suppress(StopIteration):
-        next(gen)
-
-    # Verify context var was reset
-    assert _current_item_var.get() is None
-
-
-# =============================================================================
-# Context Variable Tests
-# =============================================================================
-
-
-def test_current_item_var_default() -> None:
-    """Test that _current_item_var has None as default."""
-    # Reset to ensure clean state
-    token = _current_item_var.set(None)
-    try:
-        assert _current_item_var.get() is None
-    finally:
-        _current_item_var.reset(token)
-
-
-def test_current_item_var_set_and_get(mocker: MockerFixture) -> None:
-    """Test setting and getting the current item context variable."""
-    mock_item = mocker.MagicMock(spec=Item)
-
-    token = _current_item_var.set(mock_item)
-    try:
-        assert _current_item_var.get() == mock_item
-    finally:
-        _current_item_var.reset(token)
-
-    # After reset, should be None again
-    assert _current_item_var.get() is None
-
-
-# =============================================================================
-# Full integration test for the 'assay' pytest plugin
-#
-# The tests generate search queries for various research topics.
-# The @pytest.mark.assay decorator triggers an *assay* which produces a *readout*.
-# The assay evalutes the curiosity and originality of the generated search queries.
-#
-# Two evaluator strategies are tested:
-# 1. PairwiseEvaluator: Compares baseline vs novel responses directly
-# 2. BradleyTerryEvaluator: Ranks all responses using the Bradley-Terry model
-#
-# The assays compare two different sets of generated search queries:
-# A. Some baseline results generated with BASIC_PROMPT in the assay-mode 'new_baseline'.
-#    These results have been pre-recorded and stored in the `assays/` subfolder.`
-# B. More creative results generated with CREATIVE_PROMPT in the (default) assay-mode 'evaluate'.
-# =============================================================================
-
-
-def generate_evaluation_cases() -> Dataset[dict[str, str], str, Any]:
-    """Generate a list of Cases containing topics as input."""
-    logger.info("Creating new assay dataset.")
-
-    topics = [
-        "pangolin trafficking networks",
-        "molecular gastronomy",
-        "dark kitchen economics",
-        "kintsugi philosophy",
-        "nano-medicine delivery systems",
-        "Streisand effect dynamics",
-        "Anne Brorhilker",
-        "bioconcrete self-healing",
-        "bacteriophage therapy revival",
-        "Habsburg jaw genetics",
-    ]
-
-    cases: list[Case[dict[str, str], str, Any]] = []
-    for idx, topic in enumerate(topics):
-        logger.debug(f"Case {idx + 1} / {len(topics)} with topic: {topic}")
-        case = Case(
-            name=f"case_{idx:03d}",
-            inputs={"topic": topic},
-            expected_output="",
-        )
-        cases.append(case)
-
-    return Dataset[dict[str, str], str, Any](cases=cases)
-
-
-# =============================================================================
-# Integration tests for the 'assay' pytest plugin with different evaluators
-# =============================================================================
-
-
-# Model for both (1) the search query generation and (2) the evaluation of the generated queries.
-model = OpenAIChatModel(
-    model_name=OLLAMA_MODEL,
-    provider=OpenAIProvider(base_url=f"{OLLAMA_BASE_URL}/v1"),
-)
-
-
-BASIC_PROMPT = "Please generate a useful search query for the following research topic: <TOPIC>{topic}</TOPIC>"
-
-CREATIVE_PROMPT = """
-Please generate a very creative search query for the research topic: <TOPIC>{topic}</TOPIC>
-The query should show genuine originality and interest in the topic. AVOID any generic or formulaic phrases.
-
-Examples of formulaic queries for the topic 'molecular gastronomy' (BAD):
-- 'Definition molecular gastronomy'
-- 'Molecular gastronomy techniques and applications'
-
-Examples of curious, creative queries for the topic 'molecular gastronomy' (GOOD):
-- 'Use of liquid nitrogen instead of traditional freezing for food texture'
-- 'Failed molecular gastronomy experiments that led to new dishes'
-
-Now generate one creative search query for: <TOPIC>{topic}</TOPIC>
-"""
-
-
-async def _run_query_generation(context: AssayContext, model_settings: ModelSettings) -> None:
-    """Run query generation for all cases in the dataset."""
-    query_agent = Agent(
-        model=model,
-        output_type=str,
-        system_prompt="Please generate a concise web search query for the given research topic. You must respond only in English.",
-        retries=5,
-        instrument=True,
-    )
-
-    for case in context.dataset.cases:
-        logger.info(f"Case {case.name} with topic: {case.inputs['topic']}")
-
-        # prompt = BASIC_PROMPT.format(topic=case.inputs["topic"])  # for assay-mode 'new_baseline'
-        prompt = CREATIVE_PROMPT.format(topic=case.inputs["topic"])  # for assay-mode 'evaluate'
-
-        async with query_agent:
-            result = await query_agent.run(
-                user_prompt=prompt,
-                model_settings=model_settings,
-            )
-
-        logger.debug(f"Generated search query: {result.output}")
-
-
-@pytest.mark.ollama
-@pytest.mark.assay(
-    generator=generate_evaluation_cases,
-    evaluator=PairwiseEvaluator(
-        model=model,
-        criterion="Which of the two search queries shows more genuine curiosity and creativity, and is less formulaic?",
-    ),
-)
-@pytest.mark.asyncio
-async def test_integration_pairwiseevaluator(context: AssayContext, model_settings: ModelSettings) -> None:
-    """
-    Integration test for the 'assay' pytest plugin with PairwiseEvaluator evaluator.
-
-    An agent generates search queries for various research topics.
-    PairwiseEvaluator then evaluates the creativity of the generated queries.
-
-    Args:
-        context: The assay context containing the evaluation dataset context.dataset and other information.
-        model_settings: Deterministic model settings for reproducible tests.
-    """
-    logger.info("Integration test for assay pytest plugin with PairwiseEvaluator.")
-    await _run_query_generation(context, model_settings)
-
-
-@pytest.mark.ollama
-@pytest.mark.assay(
-    generator=generate_evaluation_cases,
-    evaluator=BradleyTerryEvaluator(
-        model=model,
-        criterion="Which of the two search queries shows more genuine curiosity and creativity, and is less formulaic?",
-        max_standard_deviation=2.1,
-    ),
-)
-@pytest.mark.asyncio
-async def test_integration_bradleyterryevaluator(context: AssayContext, model_settings: ModelSettings) -> None:
-    """
-    Integration test for the 'assay' pytest plugin with BradleyTerryEvaluator evaluator.
-
-    An agent generates search queries for various research topics.
-    BradleyTerryEvaluator then evaluates the creativity of the generated queries.
-
-    Args:
-        context: The assay context containing the evaluation dataset context.dataset and other information.
-        model_settings: Deterministic model settings for reproducible tests.
-    """
-    logger.info("Integration test for assay pytest plugin with BradleyTerryEvaluator.")
-    await _run_query_generation(context, model_settings)
