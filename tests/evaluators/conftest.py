@@ -3,9 +3,9 @@
 
 from __future__ import annotations
 
-import os
 from typing import TYPE_CHECKING, Any, Literal
 
+import httpx
 import pytest
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
@@ -20,6 +20,21 @@ if TYPE_CHECKING:
 
     from pytest_mock import MockerFixture
 
+OLLAMA_BASE_URL = "http://localhost:11434"
+
+OLLAMA_MODEL = "qwen2.5:14b"
+
+
+def _ollama_is_running() -> bool:
+    """
+    Check whether the local Ollama server is reachable.
+    """
+    try:
+        response = httpx.get(OLLAMA_BASE_URL, timeout=5)
+        return response.status_code == 200
+    except httpx.ConnectError:
+        return False
+
 
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "ollama: tests requiring a local Ollama instance")
@@ -28,11 +43,10 @@ def pytest_configure(config: pytest.Config) -> None:
 @pytest.fixture(autouse=True)
 def skip_ollama_tests(request: pytest.FixtureRequest) -> None:
     """
-    Skip tests marked with 'ollama' when running in CI environment.
-    Run these tests only locally.
+    Skip tests marked with 'ollama' when running in CI or when Ollama is not reachable.
     """
-    if request.node.get_closest_marker("ollama") and os.getenv("GITHUB_ACTIONS") == "true":
-        pytest.skip("Tests requiring Ollama skipped in CI environment")
+    if request.node.get_closest_marker("ollama") and not _ollama_is_running():
+        pytest.skip(f"Ollama server is not running at {OLLAMA_BASE_URL}. Please start it with `ollama serve` before running this test.")
 
 
 @pytest.fixture
@@ -75,8 +89,8 @@ def mock_pydantic_agent(mocker: MockerFixture) -> MagicMock:
 def evaluation_model() -> OpenAIChatModel:
     """Provide the OpenAI-compatible model pointing at local Ollama."""
     return OpenAIChatModel(
-        model_name="qwen2.5:14b",
-        provider=OpenAIProvider(base_url="http://localhost:11434/v1"),
+        model_name=OLLAMA_MODEL,
+        provider=OpenAIProvider(base_url=f"{OLLAMA_BASE_URL}/v1"),
     )
 
 
