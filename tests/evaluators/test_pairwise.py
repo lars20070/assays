@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock
@@ -15,194 +16,294 @@ from pydantic_evals import Case, Dataset
 from pytest import Function
 
 import assays.plugin
-from assays.evaluators.pairwise import PairwiseEvaluator
-from assays.plugin import AGENT_RESPONSES_KEY, BASELINE_DATASET_KEY, AssayContext
+from assays.config import config
+from assays.evaluators.pairwise import EVALUATION_INSTRUCTIONS, PairwiseEvaluator
+from assays.plugin import AGENT_RESPONSES_KEY, BASELINE_DATASET_KEY, AssayContext, Readout
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
 
-
-def test_pairwise_evaluator_init_defaults() -> None:
-    """Test PairwiseEvaluator initializes with default values."""
-    evaluator = PairwiseEvaluator()
-
-    # Default model: OpenAIChatModel with qwen3:8b on Ollama
-    assert evaluator.model is not None
-    assert isinstance(evaluator.model, OpenAIChatModel)
-    assert evaluator.model.model_name == "qwen3:8b"
-    # model_settings (TypedDict)
-    assert evaluator.model_settings.get("temperature") == 0.0
-    assert evaluator.model_settings.get("timeout") == 300
-    # system_prompt
-    assert evaluator.system_prompt is not None
-    assert "response" in evaluator.system_prompt or "A" in evaluator.system_prompt
-    assert "A" in evaluator.system_prompt and "B" in evaluator.system_prompt
-    # agent
-    assert evaluator.agent is not None
-    # criterion
-    assert "curiosity" in evaluator.criterion or "better" in evaluator.criterion.lower()
+# ---------------------------------------------------------------------------
+# Unit tests for PairwiseEvaluator
+# ---------------------------------------------------------------------------
 
 
-def test_pairwise_evaluator_init_custom() -> None:
-    """Test PairwiseEvaluator initializes with custom values."""
-    evaluator = PairwiseEvaluator(criterion="Custom criterion")
+class TestPairwiseEvaluator:
+    """Unit tests for PairwiseEvaluator."""
 
-    assert evaluator.criterion == "Custom criterion"
+    def test_init_defaults(self) -> None:
+        """Test PairwiseEvaluator initializes with default values."""
+        evaluator = PairwiseEvaluator()
 
+        # Default model: OpenAIChatModel via config
+        assert evaluator.model is not None
+        assert isinstance(evaluator.model, OpenAIChatModel)
+        assert evaluator.model.model_name == config.ollama_model
+        # model_settings (TypedDict)
+        assert evaluator.model_settings.get("temperature") == 0.0
+        assert evaluator.model_settings.get("timeout") == 300
+        # system_prompt
+        assert evaluator.system_prompt is not None
+        assert evaluator.system_prompt == EVALUATION_INSTRUCTIONS
+        # agent
+        assert evaluator.agent is not None
+        # criterion
+        assert evaluator.criterion == "Which of the two responses is better?"
 
-def test_pairwise_evaluator_init_with_custom_model(mocker: MockerFixture) -> None:
-    """Test PairwiseEvaluator uses custom model when provided."""
-    custom_model = OpenAIChatModel(
-        model_name="custom-model",
-        provider=OpenAIProvider(base_url="http://localhost:11434/v1"),
-    )
-    evaluator = PairwiseEvaluator(model=custom_model)
+    def test_init_custom(self) -> None:
+        """Test PairwiseEvaluator initializes with custom criterion."""
+        evaluator = PairwiseEvaluator(criterion="Custom criterion")
 
-    assert evaluator.model is custom_model
-    assert isinstance(evaluator.model, OpenAIChatModel)
-    assert evaluator.model.model_name == "custom-model"
-    assert evaluator.agent.model is custom_model
+        assert evaluator.criterion == "Custom criterion"
 
-
-def test_pairwise_evaluator_init_with_model_string(mocker: MockerFixture) -> None:
-    """Test PairwiseEvaluator accepts model as string (e.g. for OpenAI default)."""
-    mocker.patch("assays.evaluators.pairwise.Agent")  # Mock Agent to avoid actual initialization and API keys
-    evaluator = PairwiseEvaluator(model="openai:gpt-4o-mini")
-
-    assert evaluator.model == "openai:gpt-4o-mini"
-
-
-@pytest.mark.asyncio
-async def test_pairwise_evaluator_call_no_pairs(mocker: MockerFixture) -> None:
-    """Test PairwiseEvaluator.__call__ handles empty baseline and novel lists."""
-    evaluator = PairwiseEvaluator()
-    mock_item = mocker.MagicMock(spec=Function)
-    mock_item.funcargs = {
-        "context": AssayContext(
-            dataset=Dataset[dict[str, str], type[None], Any](cases=[]),
-            path=Path("/tmp/test.json"),
-            assay_mode="evaluate",
+    def test_init_with_custom_model(self) -> None:
+        """Test PairwiseEvaluator uses custom model when provided."""
+        custom_model = OpenAIChatModel(
+            model_name="custom-model",
+            provider=OpenAIProvider(base_url="http://localhost:11434/v1"),
         )
-    }
-    mock_item.stash = {
-        AGENT_RESPONSES_KEY: [],
-        BASELINE_DATASET_KEY: Dataset[dict[str, str], type[None], Any](cases=[]),
-    }
+        evaluator = PairwiseEvaluator(model=custom_model)
 
-    mocker.patch("assays.evaluators.pairwise.logger")
+        assert evaluator.model is custom_model
+        assert isinstance(evaluator.model, OpenAIChatModel)
+        assert evaluator.model.model_name == "custom-model"
+        assert evaluator.agent.model is custom_model
 
-    result = await evaluator(mock_item)
+    def test_init_with_model_string(self, mocker: MockerFixture) -> None:
+        """Test PairwiseEvaluator accepts model as string (e.g. for OpenAI default)."""
+        mocker.patch("assays.evaluators.pairwise.Agent")  # Mock Agent to avoid actual initialization and API keys
+        evaluator = PairwiseEvaluator(model="openai:gpt-4o-mini")
 
-    assert type(result).__name__ == "Readout"
-    assert result.passed is False
-    assert result.details is not None
-    assert result.details.get("test_cases_count") == 0
-    assert result.details.get("wins_baseline") == []
-    assert result.details.get("wins_novel") == []
+        assert evaluator.model == "openai:gpt-4o-mini"
 
+    @pytest.mark.asyncio
+    async def test_call_no_pairs(self, mocker: MockerFixture) -> None:
+        """Test __call__ with empty baseline and novel lists returns passed=False."""
+        evaluator = PairwiseEvaluator()
+        mock_item = mocker.MagicMock(spec=Function)
+        mock_item.funcargs = {
+            "context": AssayContext(
+                dataset=Dataset[dict[str, str], type[None], Any](cases=[]),
+                path=Path("/tmp/test.json"),
+                assay_mode="evaluate",
+            )
+        }
+        mock_item.stash = {
+            AGENT_RESPONSES_KEY: [],
+            BASELINE_DATASET_KEY: Dataset[dict[str, str], type[None], Any](cases=[]),
+        }
 
-@pytest.mark.asyncio
-async def test_pairwise_evaluator_call_with_pairs(mocker: MockerFixture) -> None:
-    """Test PairwiseEvaluator.__call__ runs pairwise comparison with mocked agent."""
-    evaluator = PairwiseEvaluator(criterion="Test criterion")
+        mocker.patch("assays.evaluators.pairwise.logger")
 
-    cases: list[Case[dict[str, str], type[None], Any]] = [
-        Case(name="case_001", inputs={"query": "baseline query 1"}),
-        Case(name="case_002", inputs={"query": "baseline query 2"}),
-    ]
-    dataset = Dataset[dict[str, str], type[None], Any](cases=cases)
+        result = await evaluator(mock_item)
 
-    mock_response1 = mocker.MagicMock(spec=AgentRunResult)
-    mock_response1.output = "novel output 1"
-    mock_response2 = mocker.MagicMock(spec=AgentRunResult)
-    mock_response2.output = "novel output 2"
+        assert isinstance(result, Readout)
+        assert result.passed is False
+        assert result.details is not None
+        assert result.details.get("test_cases_count") == 0
+        assert result.details.get("wins_baseline") == []
+        assert result.details.get("wins_novel") == []
 
-    mock_item = mocker.MagicMock(spec=Function)
-    mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=Path("/tmp/test.json"), assay_mode="evaluate")}
-    mock_item.stash = {
-        AGENT_RESPONSES_KEY: [mock_response1, mock_response2],
-        assays.plugin.BASELINE_DATASET_KEY: dataset,
-    }
+    @pytest.mark.asyncio
+    async def test_call_novel_wins(self, mocker: MockerFixture) -> None:
+        """Test __call__ when novel wins all comparisons."""
+        evaluator = PairwiseEvaluator(criterion="Test criterion")
 
-    mocker.patch("assays.evaluators.pairwise.logger")
+        cases: list[Case[dict[str, str], type[None], Any]] = [
+            Case(name="case_001", inputs={"query": "baseline query 1"}),
+            Case(name="case_002", inputs={"query": "baseline query 2"}),
+        ]
+        dataset = Dataset[dict[str, str], type[None], Any](cases=cases)
 
-    # Mock agent.run to return "B" (novel wins) for both comparisons
-    mock_run_result = mocker.MagicMock()
-    mock_run_result.output = "B"
-    mocker.patch.object(evaluator.agent, "run", new_callable=AsyncMock, return_value=mock_run_result)
+        mock_response1 = mocker.MagicMock(spec=AgentRunResult)
+        mock_response1.output = "novel output 1"
+        mock_response2 = mocker.MagicMock(spec=AgentRunResult)
+        mock_response2.output = "novel output 2"
 
-    result = await evaluator(mock_item)
+        mock_item = mocker.MagicMock(spec=Function)
+        mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=Path("/tmp/test.json"), assay_mode="evaluate")}
+        mock_item.stash = {
+            AGENT_RESPONSES_KEY: [mock_response1, mock_response2],
+            assays.plugin.BASELINE_DATASET_KEY: dataset,
+        }
 
-    # Novel wins both -> passed=True
-    assert type(result).__name__ == "Readout"
-    assert result.passed is True
-    assert result.details is not None
-    assert result.details.get("test_cases_count") == 2
-    assert result.details.get("wins_novel") == [True, True]
-    assert result.details.get("wins_baseline") == [False, False]
+        mocker.patch("assays.evaluators.pairwise.logger")
 
+        # Mock agent.run to return "B" (novel wins) for both comparisons
+        mock_run_result = mocker.MagicMock()
+        mock_run_result.output = "B"
+        mocker.patch.object(evaluator.agent, "run", new_callable=AsyncMock, return_value=mock_run_result)
 
-@pytest.mark.asyncio
-async def test_pairwise_evaluator_call_baseline_wins(mocker: MockerFixture) -> None:
-    """Test PairwiseEvaluator.__call__ when baseline wins more comparisons."""
-    evaluator = PairwiseEvaluator(criterion="Test criterion")
+        result = await evaluator(mock_item)
 
-    cases: list[Case[dict[str, str], type[None], Any]] = [
-        Case(name="case_001", inputs={"query": "baseline query"}),
-    ]
-    dataset = Dataset[dict[str, str], type[None], Any](cases=cases)
+        assert isinstance(result, Readout)
+        assert result.passed is True
+        assert result.details is not None
+        assert result.details.get("test_cases_count") == 2
+        assert result.details.get("wins_novel") == [True, True]
+        assert result.details.get("wins_baseline") == [False, False]
 
-    mock_response = mocker.MagicMock(spec=AgentRunResult)
-    mock_response.output = "novel output"
+    @pytest.mark.asyncio
+    async def test_call_baseline_wins(self, mocker: MockerFixture) -> None:
+        """Test __call__ when baseline wins more comparisons."""
+        evaluator = PairwiseEvaluator(criterion="Test criterion")
 
-    mock_item = mocker.MagicMock(spec=Function)
-    mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=Path("/tmp/test.json"), assay_mode="evaluate")}
-    mock_item.stash = {
-        AGENT_RESPONSES_KEY: [mock_response],
-        assays.plugin.BASELINE_DATASET_KEY: dataset,
-    }
+        cases: list[Case[dict[str, str], type[None], Any]] = [
+            Case(name="case_001", inputs={"query": "baseline query"}),
+        ]
+        dataset = Dataset[dict[str, str], type[None], Any](cases=cases)
 
-    mocker.patch("assays.evaluators.pairwise.logger")
+        mock_response = mocker.MagicMock(spec=AgentRunResult)
+        mock_response.output = "novel output"
 
-    # Mock agent.run to return "A" (baseline wins)
-    mock_run_result = mocker.MagicMock()
-    mock_run_result.output = "A"
-    mocker.patch.object(evaluator.agent, "run", new_callable=AsyncMock, return_value=mock_run_result)
+        mock_item = mocker.MagicMock(spec=Function)
+        mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=Path("/tmp/test.json"), assay_mode="evaluate")}
+        mock_item.stash = {
+            AGENT_RESPONSES_KEY: [mock_response],
+            assays.plugin.BASELINE_DATASET_KEY: dataset,
+        }
 
-    result = await evaluator(mock_item)
+        mocker.patch("assays.evaluators.pairwise.logger")
 
-    assert type(result).__name__ == "Readout"
-    assert result.passed is False
-    assert result.details is not None
-    assert result.details.get("wins_novel") == [False]
-    assert result.details.get("wins_baseline") == [True]
+        # Mock agent.run to return "A" (baseline wins)
+        mock_run_result = mocker.MagicMock()
+        mock_run_result.output = "A"
+        mocker.patch.object(evaluator.agent, "run", new_callable=AsyncMock, return_value=mock_run_result)
 
+        result = await evaluator(mock_item)
 
-@pytest.mark.asyncio
-async def test_pairwise_evaluator_call_mismatch_raises(mocker: MockerFixture) -> None:
-    """Test PairwiseEvaluator.__call__ raises when baseline and novel counts differ."""
-    evaluator = PairwiseEvaluator()
-    cases: list[Case[dict[str, str], type[None], Any]] = [
-        Case(name="case_001", inputs={"query": "baseline query"}),
-    ]
-    dataset = Dataset[dict[str, str], type[None], Any](cases=cases)
+        assert isinstance(result, Readout)
+        assert result.passed is False
+        assert result.details is not None
+        assert result.details.get("wins_novel") == [False]
+        assert result.details.get("wins_baseline") == [True]
 
-    mock_item = mocker.MagicMock(spec=Function)
-    mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=Path("/tmp/test.json"), assay_mode="evaluate")}
-    mock_item.stash = {
-        AGENT_RESPONSES_KEY: [],  # No novel responses
-        assays.plugin.BASELINE_DATASET_KEY: dataset,
-    }
+    @pytest.mark.asyncio
+    async def test_call_tie_fails(self, mocker: MockerFixture) -> None:
+        """Test __call__ when wins are tied (novel must strictly exceed baseline to pass)."""
+        evaluator = PairwiseEvaluator()
 
-    mocker.patch("assays.evaluators.pairwise.logger")
+        cases: list[Case[dict[str, str], type[None], Any]] = [
+            Case(name="case_001", inputs={"query": "q1"}),
+            Case(name="case_002", inputs={"query": "q2"}),
+        ]
+        dataset = Dataset[dict[str, str], type[None], Any](cases=cases)
 
-    with pytest.raises(AssertionError, match="Mismatch in response counts"):
+        mock_response1 = mocker.MagicMock(spec=AgentRunResult)
+        mock_response1.output = "novel 1"
+        mock_response2 = mocker.MagicMock(spec=AgentRunResult)
+        mock_response2.output = "novel 2"
+
+        mock_item = mocker.MagicMock(spec=Function)
+        mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=Path("/tmp/test.json"), assay_mode="evaluate")}
+        mock_item.stash = {
+            AGENT_RESPONSES_KEY: [mock_response1, mock_response2],
+            assays.plugin.BASELINE_DATASET_KEY: dataset,
+        }
+
+        mocker.patch("assays.evaluators.pairwise.logger")
+
+        # First call returns "B" (novel wins), second returns "A" (baseline wins) → tie
+        mock_result_b = mocker.MagicMock()
+        mock_result_b.output = "B"
+        mock_result_a = mocker.MagicMock()
+        mock_result_a.output = "A"
+        mocker.patch.object(evaluator.agent, "run", new_callable=AsyncMock, side_effect=[mock_result_b, mock_result_a])
+
+        result = await evaluator(mock_item)
+
+        assert isinstance(result, Readout)
+        assert result.passed is False
+        assert result.details is not None
+        assert result.details.get("wins_novel") == [True, False]
+        assert result.details.get("wins_baseline") == [False, True]
+
+    @pytest.mark.asyncio
+    async def test_call_mismatch_raises(self, mocker: MockerFixture) -> None:
+        """Test __call__ raises when baseline and novel counts differ."""
+        evaluator = PairwiseEvaluator()
+        cases: list[Case[dict[str, str], type[None], Any]] = [
+            Case(name="case_001", inputs={"query": "baseline query"}),
+        ]
+        dataset = Dataset[dict[str, str], type[None], Any](cases=cases)
+
+        mock_item = mocker.MagicMock(spec=Function)
+        mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=Path("/tmp/test.json"), assay_mode="evaluate")}
+        mock_item.stash = {
+            AGENT_RESPONSES_KEY: [],  # No novel responses
+            assays.plugin.BASELINE_DATASET_KEY: dataset,
+        }
+
+        mocker.patch("assays.evaluators.pairwise.logger")
+
+        with pytest.raises(AssertionError, match="Mismatch in response counts"):
+            await evaluator(mock_item)
+
+    @pytest.mark.asyncio
+    async def test_call_skips_none_output(self, mocker: MockerFixture) -> None:
+        """Test __call__ skips novel responses with None output."""
+        evaluator = PairwiseEvaluator()
+
+        # No baseline cases → 0 baseline responses
+        dataset = Dataset[dict[str, str], type[None], Any](cases=[])
+
+        mock_response = mocker.MagicMock(spec=AgentRunResult)
+        mock_response.output = None  # None output should be skipped
+
+        mock_item = mocker.MagicMock(spec=Function)
+        mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=Path("/tmp/test.json"), assay_mode="evaluate")}
+        mock_item.stash = {
+            AGENT_RESPONSES_KEY: [mock_response],
+            BASELINE_DATASET_KEY: dataset,
+        }
+
+        mocker.patch("assays.evaluators.pairwise.logger")
+
+        # 0 baseline, 0 novel (the None was skipped) → no mismatch, passed=False
+        result = await evaluator(mock_item)
+
+        assert isinstance(result, Readout)
+        assert result.passed is False
+        assert result.details is not None
+        assert result.details.get("test_cases_count") == 0
+
+    @pytest.mark.asyncio
+    async def test_call_prompt_contains_criterion_and_responses(self, mocker: MockerFixture) -> None:
+        """Test the prompt passed to the agent includes criterion, baseline, and novel text."""
+        evaluator = PairwiseEvaluator(criterion="creativity")
+
+        cases: list[Case[dict[str, str], str, Any]] = [
+            Case(name="case_001", inputs={"query": "q1"}, expected_output="vanilla"),
+        ]
+        dataset = Dataset[dict[str, str], str, Any](cases=cases)
+
+        mock_response = mocker.MagicMock(spec=AgentRunResult)
+        mock_response.output = "miso caramel"
+
+        mock_item = mocker.MagicMock(spec=Function)
+        mock_item.funcargs = {"context": AssayContext(dataset=dataset, path=Path("/tmp/test.json"), assay_mode="evaluate")}
+        mock_item.stash = {
+            AGENT_RESPONSES_KEY: [mock_response],
+            BASELINE_DATASET_KEY: dataset,
+        }
+
+        mocker.patch("assays.evaluators.pairwise.logger")
+
+        mock_run_result = mocker.MagicMock()
+        mock_run_result.output = "A"
+        mock_run = mocker.patch.object(evaluator.agent, "run", new_callable=AsyncMock, return_value=mock_run_result)
+
         await evaluator(mock_item)
 
+        call_kwargs = mock_run.call_args.kwargs
+        prompt = call_kwargs["user_prompt"]
+        assert "creativity" in prompt
+        assert "vanilla" in prompt  # baseline from expected_output
+        assert "miso caramel" in prompt  # novel from agent response
 
-@pytest.mark.asyncio
-async def test_pairwise_evaluator_protocol_conformance() -> None:
-    """Test PairwiseEvaluator conforms to Evaluator Protocol."""
-    evaluator = PairwiseEvaluator()
-    # Should be callable with Item and return Coroutine[Any, Any, Readout]
-    assert callable(evaluator)
+    @pytest.mark.asyncio
+    async def test_protocol_conformance(self) -> None:
+        """Test PairwiseEvaluator conforms to Evaluator Protocol."""
+        evaluator = PairwiseEvaluator()
+        assert callable(evaluator)
+        assert inspect.iscoroutinefunction(evaluator.__call__)
