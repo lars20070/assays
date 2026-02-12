@@ -1006,7 +1006,7 @@ model = OpenAIChatModel(
 
 BASIC_PROMPT = "Please generate a useful search query for the following research topic: <TOPIC>{topic}</TOPIC>"
 
-CREATIVE_PROMPT = """\
+CREATIVE_PROMPT = """
 Please generate a very creative search query for the research topic: <TOPIC>{topic}</TOPIC>
 The query should show genuine originality and interest in the topic. AVOID any generic or formulaic phrases.
 
@@ -1018,7 +1018,8 @@ Examples of curious, creative queries for the topic 'molecular gastronomy' (GOOD
 - 'Use of liquid nitrogen instead of traditional freezing for food texture'
 - 'Failed molecular gastronomy experiments that led to new dishes'
 
-Now generate one creative search query for: <TOPIC>{topic}</TOPIC>"""
+Now generate one creative search query for: <TOPIC>{topic}</TOPIC>
+"""
 
 
 async def _run_query_generation(context: AssayContext, model_settings: ModelSettings) -> None:
