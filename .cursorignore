@@ -11,5 +11,3 @@ __pycache__/
 !.env.example
 *.log
 dist/
-**/assays/**
-**/cassettes/**
