@@ -255,28 +255,35 @@ AGENT_NAME = Agent(
 Use Google-style docstrings (not Sphinx style):
 
 ### Formatting Rules
-- **No backticks**: Do not use backticks in docstrings. Write --assay-mode as --assay-mode, None as None, True as True, etc.
+- **No backticks**: Do not use backticks in docstrings. Write `--assay-mode` as --assay-mode, `None` as None, `True` as True, etc.
 - Google style uses plain text for parameter names, options, and values
+- For single-line docstrings, place initial and final triple quotes on the same line:
+  ```python
+  def add(a: int, b: int) -> int:
+      """Add two integers."""
+      return a + b
+  ```
+- For multi-line docstrings, place initial and final triple quotes on their own lines:
+  ```python
+  def complex_function(param1: str, param2: int = 5) -> dict[str, Any]:
+      """
+      Short one-line description.
 
-```python
-def complex_function(param1: str, param2: int = 5) -> dict[str, Any]:
-    """Short one-line description.
+      Longer description if needed, explaining the function's purpose,
+      behavior, and any important details.
 
-    Longer description if needed, explaining the function's purpose,
-    behavior, and any important details.
+      Args:
+          param1: Description of param1.
+          param2: Description of param2. Defaults to 5.
 
-    Args:
-        param1: Description of param1.
-        param2: Description of param2. Defaults to 5.
+      Returns:
+          Description of return value.
 
-    Returns:
-        Description of return value.
-
-    Raises:
-        ValueError: When param2 is negative.
-    """
-    ...
-```
+      Raises:
+          ValueError: When param2 is negative.
+      """
+      ...
+  ```
 
 ## Before Committing
 
