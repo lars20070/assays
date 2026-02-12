@@ -97,7 +97,7 @@ reportMissingTypeStubs = false
 reportPrivateUsage = false
 
 [tool.pytest.ini_options]
-addopts = ["-m", "not paid"] # Skip tests that require a paid API key
+pythonpath = ["tests"]
 asyncio_default_fixture_loop_scope = "function" # Use "session" for a single event loop for all tests or "function" for a new event loop for every test (more isolation).
 markers = [
   "ollama: tests requiring a local Ollama instance",

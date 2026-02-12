@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from _ollama import OLLAMA_BASE_URL, OLLAMA_MODEL
 from pydantic_ai.settings import ModelSettings
-
-OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL = "qwen2.5:14b"
 
 
 def _ollama_is_running() -> bool:

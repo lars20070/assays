@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock
 
 import pytest
+from _ollama import OLLAMA_BASE_URL, OLLAMA_MODEL
 from pydantic_ai import Agent
 from pydantic_ai.agent import AgentRunResult
 from pydantic_ai.models.openai import OpenAIChatModel
@@ -991,10 +992,15 @@ def generate_evaluation_cases() -> Dataset[dict[str, str], str, Any]:
     return Dataset[dict[str, str], str, Any](cases=cases)
 
 
+# =============================================================================
+# Integration tests for the 'assay' pytest plugin with different evaluators
+# =============================================================================
+
+
 # Model for both (1) the search query generation and (2) the evaluation of the generated queries.
 model = OpenAIChatModel(
-    model_name="qwen2.5:14b",
-    provider=OpenAIProvider(base_url="http://localhost:11434/v1"),  # Local Ollama server
+    model_name=OLLAMA_MODEL,
+    provider=OpenAIProvider(base_url=f"{OLLAMA_BASE_URL}/v1"),
 )
 
 
@@ -1038,11 +1044,6 @@ async def _run_query_generation(context: AssayContext, model_settings: ModelSett
             )
 
         logger.debug(f"Generated search query: {result.output}")
-
-
-# =============================================================================
-# Integration tests for the 'assay' pytest plugin with different evaluators
-# =============================================================================
 
 
 @pytest.mark.ollama
