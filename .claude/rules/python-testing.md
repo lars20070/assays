@@ -9,7 +9,6 @@
 ## Test Structure
 
 ```python
-@pytest.mark.vcr()  # For tests using VCR cassettes
 @pytest.mark.asyncio  # For async tests
 async def test_feature() -> None:
     """Test description."""
@@ -48,7 +47,6 @@ uv run pytest --cov=src/assays --cov-report=term-missing
 ## Markers
 
 - `@pytest.mark.ollama` - Requires local Ollama (skipped in CI)
-- `@pytest.mark.vcr()` - Uses VCR cassettes for HTTP recording
 
 ## VCR Cassettes
 
