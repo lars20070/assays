@@ -38,7 +38,7 @@
   "conventions": {
     "asyncPatterns": "Use async/await for all LLM interactions and web searches",
     "errorHandling": "Use tenacity for retries, loguru for logging",
-    "testMarkers": "Use pytest markers: 'paid', 'ollama', 'searxng', 'vcr'",
+    "testMarkers": "Use pytest markers: 'ollama'",
     "docstrings": "Use Google-style docstrings without backticks",
     "typeHints": "Required for all functions, use Python 3.12+ syntax",
     "imports": "Standard library, then third-party, then local imports"

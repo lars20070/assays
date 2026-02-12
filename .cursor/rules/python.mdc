@@ -303,7 +303,7 @@ uv run ruff check --fix .
 uv run pyright .
 
 # 4. Run tests
-uv run pytest -n auto -m "not paid"
+uv run pytest -n auto
 ```
 
 **Note:** The `--fix` flag automatically resolves fixable linting issues. Always verify the changes it makes are appropriate.

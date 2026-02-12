@@ -25,7 +25,6 @@ uv sync
 
 ```bash
 # Run all tests
-# Excluding tests marked 'paid'. See `addopts` in pyproject.toml for details.
 uv run pytest
 
 # Run tests with verbose output

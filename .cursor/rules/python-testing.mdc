@@ -29,8 +29,8 @@ async def test_feature() -> None:
 
 ### Running Tests
 ```bash
-# Skip tests requiring paid APIs
-uv run pytest -m "not paid"
+# Run all tests
+uv run pytest
 
 # Run specific test
 uv run pytest tests/test_utils.py::test_fetch_content -v
