@@ -80,7 +80,8 @@
     "fastmcp",
     "trixie",
     "unsanitized",
-    "zstd"
+    "zstd",
+    "pypi"
   ],
   "cSpell.languageSettings": [
     {
