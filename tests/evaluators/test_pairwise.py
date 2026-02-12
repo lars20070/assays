@@ -16,7 +16,6 @@ from pydantic_evals import Case, Dataset
 from pytest import Function
 
 import assays.plugin
-from assays.config import config
 from assays.evaluators.pairwise import EVALUATION_INSTRUCTIONS, PairwiseEvaluator
 from assays.plugin import AGENT_RESPONSES_KEY, BASELINE_DATASET_KEY, AssayContext, Readout
 
@@ -31,14 +30,14 @@ if TYPE_CHECKING:
 class TestPairwiseEvaluator:
     """Unit tests for PairwiseEvaluator."""
 
-    def test_init_defaults(self) -> None:
+    def test_init_defaults(self, ollama_model: str) -> None:
         """Test PairwiseEvaluator initializes with default values."""
         evaluator = PairwiseEvaluator()
 
-        # Default model: OpenAIChatModel via config
+        # Default model: OpenAIChatModel on Ollama
         assert evaluator.model is not None
         assert isinstance(evaluator.model, OpenAIChatModel)
-        assert evaluator.model.model_name == config.ollama_model
+        assert evaluator.model.model_name == ollama_model
         # model_settings (TypedDict)
         assert evaluator.model_settings.get("temperature") == 0.0
         assert evaluator.model_settings.get("timeout") == 300

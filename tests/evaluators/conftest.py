@@ -61,6 +61,18 @@ def skip_ollama_tests(request: pytest.FixtureRequest) -> None:
 
 
 @pytest.fixture
+def ollama_base_url() -> str:
+    """Provide the Ollama base URL for unit test assertions."""
+    return OLLAMA_BASE_URL
+
+
+@pytest.fixture
+def ollama_model() -> str:
+    """Provide the Ollama model name for unit test assertions."""
+    return OLLAMA_MODEL
+
+
+@pytest.fixture
 def model_settings() -> ModelSettings:
     """Provide deterministic model settings for VCR-compatible tests."""
     return ModelSettings(temperature=0.0, timeout=300)

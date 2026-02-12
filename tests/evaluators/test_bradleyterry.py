@@ -247,14 +247,14 @@ class TestEvalTournament:
 class TestBradleyTerryEvaluator:
     """Unit tests for BradleyTerryEvaluator."""
 
-    def test_init_defaults(self) -> None:
+    def test_init_defaults(self, ollama_model: str) -> None:
         """Test BradleyTerryEvaluator initializes with default values."""
         evaluator = BradleyTerryEvaluator()
 
-        # Default model: OpenAIChatModel with qwen2.5:14b on Ollama
+        # Default model: OpenAIChatModel on Ollama
         assert evaluator.model is not None
         assert isinstance(evaluator.model, OpenAIChatModel)
-        assert evaluator.model.model_name == "qwen2.5:14b"
+        assert evaluator.model.model_name == ollama_model
         # model_settings (TypedDict)
         assert evaluator.model_settings.get("temperature") == 0.0
         assert evaluator.model_settings.get("timeout") == 300
