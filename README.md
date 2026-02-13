@@ -1,7 +1,7 @@
 <div align="center">
   <a href="https://github.com/lars20070/assays/">
     <picture>
-      <img src=".github/images/banner_assays.png" alt="Assays" width="60%">
+      <img src="https://raw.githubusercontent.com/lars20070/assays/master/.github/images/banner_assays.png" alt="Assays" width="60%">
     </picture>
   </a>
 </div>
