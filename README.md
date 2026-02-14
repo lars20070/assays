@@ -14,7 +14,7 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/lars20070/assays)
 [![License](https://img.shields.io/github/license/lars20070/assays)](https://github.com/lars20070/assays/blob/master/LICENSE)
 
-*Assays* is a framework for the evaluation of [Pydantic AI](https://ai.pydantic.dev) agents. By adding the `@pytest.mark.assay` decorator to a test, you can run an *assay* resulting in a *readout* report which contains the evaluation. The assay compares the current agent responses against pre-recorded baseline responses, e.g. from the `main` branch. The implementation is using pytest hooks which capture [`Agent.run()`](https://ai.pydantic.dev/agent) responses inside the test. Below is a minimal example which evaluates the creativity of a search query generation. For a fully functional example see [`tests/test_plugin_integration.py`](tests/test_plugin_integration.py).
+*Assays* is a framework for the evaluation of [Pydantic AI](https://ai.pydantic.dev) agents. By adding the `@pytest.mark.assay` decorator to a test, you can run an *assay* resulting in a *readout* report which contains the evaluation. The assay compares the current agent responses against pre-recorded baseline responses, e.g. from the `main` branch. The implementation is using pytest hooks which capture [`Agent.run()`](https://ai.pydantic.dev/agent) responses inside the test. Below is a minimal example which evaluates the creativity of a search query generation. For a fully functional example see [`tests/test_plugin_integration.py`](https://github.com/lars20070/assays/blob/master/tests/test_plugin_integration.py).
 
 ```python
 def generate_evaluation_cases():
