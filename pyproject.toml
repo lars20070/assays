@@ -1,6 +1,6 @@
 [project]
 name = "assays"
-version = "0.1.1"
+version = "0.1.2"
 description = "Evaluation framework for Pydantic AI agents"
 readme = "README.md"
 authors = [{ name = "Lars Nilse", email = "l.nilse@dunelm.org.uk" }]
