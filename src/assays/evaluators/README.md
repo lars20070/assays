@@ -1,0 +1,5 @@
+## Evaluators
+
+The *Assays* framework provides two built-in evaluators:
+* `PairwiseEvaluator` compares the pre-recorded baseline responses with the current agent responses in a pairwise manner. The *readout* report contains the boolean comparison results.
+* `BradleyTerryEvaluator` scores both baseline and current responses using the [Bradley-Terry model](https://en.wikipedia.org/wiki/Bradley–Terry_model). The *readout* report contains the scores for each response and the overall ranking.
